@@ -7,16 +7,10 @@
 # meta_desc: Switch your Heroku to ratko
 # ---------------------------------------------------------------------------------
 
-import asyncio
 import contextlib
-import datetime
-import io
-import json
 import logging
-import os
 import subprocess
 import sys
-import zipfile
 from pathlib import Path
 
 import git
@@ -46,22 +40,19 @@ class MigrationError(Exception):
 
 @loader.tds
 class SwitchToRatko(loader.Module):
-    """Create backup and switch this Heroku install to ratko"""
+    """Switch this Heroku install to ratko"""
 
     strings = {
         "name": "SwitchToRatko",
         "already": "<b>You are already running ratko.</b>",
         "confirm": (
-            "<b>This command will create a full backup in Saved Messages, switch"
-            " this install from Heroku to ratko, migrate renamed module data and"
-            " restart the userbot.</b>\n\n"
+            "<b>This command will switch this install from Heroku to ratko,"
+            " migrate renamed module data and restart the userbot.</b>\n\n"
+            "<b>Recommended:</b> create a manual backup first with"
+            " <code>{prefix}backupall</code>.\n\n"
             "Run <code>{prefix}switchtoratko -f</code> to continue."
         ),
-        "backing_up": "<b>Creating backup before switching...</b>",
-        "backup_saved": (
-            "<b>Backup saved to your Saved Messages.</b>\n"
-            "Switching this install to ratko..."
-        ),
+        "starting": "<b>Starting switch to ratko...</b>",
         "switching_repo": "<b>Switching git remote to ratko...</b>",
         "migrating_db": "<b>Migrating database owners for ratko...</b>",
         "installing": "<b>Installing ratko requirements...</b>",
@@ -71,11 +62,6 @@ class SwitchToRatko(loader.Module):
             " restart."
         ),
         "restarting": "<b>Migration complete. Restarting into ratko...</b>",
-        "backup_caption": (
-            "<b>Backup created before switching from Heroku to ratko.</b>\n"
-            "Reply to this file with <code>{prefix}restoreall</code> if you need"
-            " to roll back."
-        ),
         "dirty": (
             "<b>The repository has tracked local changes.</b>\n"
             "Commit or stash them first, then run the switch again."
@@ -90,21 +76,19 @@ class SwitchToRatko(loader.Module):
             "This helper module will unload itself now."
         ),
         "github": "📖 GitHub",
-        "_cmd_doc_switchtoratko": "Create backup and switch this Heroku install to ratko",
+        "_cmd_doc_switchtoratko": "Switch this Heroku install to ratko",
     }
 
     strings_ru = {
         "already": "<b>У тебя уже запущен ratko.</b>",
         "confirm": (
-            "<b>Эта команда создаст полный бэкап в Избранном, переключит"
-            " этот инстанс с Heroku на ratko, перенесет данные переименованных"
-            " модулей и перезапустит юзербот.</b>\n\n"
+            "<b>Эта команда переключит этот инстанс с Heroku на ratko,"
+            " перенесет данные переименованных модулей и перезапустит юзербот.</b>\n\n"
+            "<b>Лучше сначала сделать ручной бэкап через</b>"
+            " <code>{prefix}backupall</code>.\n\n"
             "Запусти <code>{prefix}switchtoratko -f</code>, чтобы продолжить."
         ),
-        "backing_up": "<b>Создаю бэкап перед переключением...</b>",
-        "backup_saved": (
-            "<b>Бэкап отправлен в Избранное.</b>\nПереключаю этот инстанс на ratko..."
-        ),
+        "starting": "<b>Начинаю переключение на ratko...</b>",
         "switching_repo": "<b>Переключаю git remote на ratko...</b>",
         "migrating_db": "<b>Переношу DB-данные модулей под ratko...</b>",
         "installing": "<b>Устанавливаю зависимости ratko...</b>",
@@ -113,11 +97,6 @@ class SwitchToRatko(loader.Module):
             " но после перезапуска может понадобиться вручную доставить пакеты."
         ),
         "restarting": "<b>Миграция завершена. Перезапускаюсь уже в ratko...</b>",
-        "backup_caption": (
-            "<b>Бэкап создан перед переходом с Heroku на ratko.</b>\n"
-            "Если понадобится откат, ответь на этот файл командой"
-            " <code>{prefix}restoreall</code>."
-        ),
         "dirty": (
             "<b>В репозитории есть локальные изменения в отслеживаемых файлах.</b>"
             "\nСначала закоммить или убери их в stash, потом повтори переключение."
@@ -132,7 +111,7 @@ class SwitchToRatko(loader.Module):
             "Теперь этот вспомогательный модуль сам выгрузится."
         ),
         "github": "📖 GitHub",
-        "_cmd_doc_switchtoratko": "Создать бэкап и переключить этот Heroku инстанс на ratko",
+        "_cmd_doc_switchtoratko": "Переключить этот Heroku инстанс на ratko",
     }
 
     async def client_ready(self):
@@ -169,14 +148,28 @@ class SwitchToRatko(loader.Module):
         except Exception:
             return False
 
+    def _clone_jsonable(self, value):
+        if isinstance(value, dict):
+            return {
+                key: self._clone_jsonable(subvalue) for key, subvalue in value.items()
+            }
+
+        if isinstance(value, list):
+            return [self._clone_jsonable(item) for item in value]
+
+        if isinstance(value, tuple):
+            return [self._clone_jsonable(item) for item in value]
+
+        return value
+
     def _raw_db_snapshot(self) -> dict:
-        return json.loads(json.dumps(self._db, ensure_ascii=False))
+        return {key: self._clone_jsonable(value) for key, value in self._db.items()}
 
     def _migrated_db_snapshot(self, source: dict) -> dict:
-        snapshot = json.loads(json.dumps(source, ensure_ascii=False))
+        snapshot = self._clone_jsonable(source)
 
         for old_owner, new_owner in MODULE_OWNER_RENAMES.items():
-            old_data = snapshot.pop(old_owner, None)
+            old_data = snapshot.get(old_owner, None)
             if not isinstance(old_data, dict):
                 continue
 
@@ -191,70 +184,6 @@ class SwitchToRatko(loader.Module):
         updater_cfg = snapshot.setdefault("UpdaterMod", {}).setdefault("__config__", {})
         updater_cfg["GIT_ORIGIN_URL"] = TARGET_REPO_URL
         return snapshot
-
-    async def _pip_freeze(self) -> bytes:
-        proc = await asyncio.create_subprocess_exec(
-            sys.executable,
-            "-m",
-            "pip",
-            "freeze",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, _ = await proc.communicate()
-        return stdout
-
-    async def _build_backup(self, source_db: dict) -> io.BytesIO:
-        db_json = json.dumps(
-            source_db,
-            ensure_ascii=False,
-            indent=2,
-            sort_keys=True,
-        ).encode("utf-8")
-
-        mods = io.BytesIO()
-        with zipfile.ZipFile(mods, "w", zipfile.ZIP_DEFLATED) as zipf:
-            for root, _, files in os.walk(loader.LOADED_MODULES_DIR):
-                for file in files:
-                    if not file.endswith(f"{self.tg_id}.py"):
-                        continue
-
-                    module_path = os.path.join(root, file)
-                    with open(module_path, "rb") as module_file:
-                        zipf.writestr(file, module_file.read())
-
-            zipf.writestr(
-                "db_mods.json",
-                json.dumps(
-                    self.lookup("Loader").get("loaded_modules", {}),
-                    ensure_ascii=False,
-                    indent=2,
-                    sort_keys=True,
-                ).encode("utf-8"),
-            )
-
-        mods.seek(0)
-        reqs = await self._pip_freeze()
-
-        archive = io.BytesIO()
-        timestamp = datetime.datetime.now().strftime("%d-%m-%Y-%H-%M")
-        with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr("db.json", db_json)
-            zf.writestr("mods.zip", mods.getvalue())
-            zf.writestr(f"pip-backup-{timestamp}.txt", reqs)
-
-        archive.seek(0)
-        archive.name = f"switch-to-ratko-{timestamp}.backup"
-        return archive
-
-    async def _send_backup(self, archive: io.BytesIO) -> None:
-        await self._client.send_file(
-            "me",
-            archive,
-            caption=self.strings("backup_caption").format(
-                prefix=utils.escape_html(self.get_prefix())
-            ),
-        )
 
     def _switch_repo(self) -> None:
         repo = self._repo()
@@ -332,11 +261,7 @@ class SwitchToRatko(loader.Module):
             source_db = self._raw_db_snapshot()
             migrated_db = self._migrated_db_snapshot(source_db)
 
-            await utils.answer(message, self.strings("backing_up"))
-            backup = await self._build_backup(source_db)
-            await self._send_backup(backup)
-
-            await utils.answer(message, self.strings("backup_saved"))
+            await utils.answer(message, self.strings("starting"))
             await utils.answer(message, self.strings("switching_repo"))
             self._switch_repo()
 
