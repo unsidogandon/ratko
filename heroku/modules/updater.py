@@ -36,8 +36,8 @@ from .._internal import restart
 from ..inline.types import BotInlineCall, InlineCall
 
 logger = logging.getLogger(__name__)
-REPO_URL = "https://github.com/ewik3984747/ratko"
-REPO_API_URL = "https://api.github.com/repos/ewik3984747/ratko"
+REPO_URL = "https://github.com/unsidogandon/ratko"
+REPO_API_URL = "https://api.github.com/repos/unsidogandon/ratko"
 
 
 def _is_no_git() -> bool:
