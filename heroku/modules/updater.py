@@ -198,7 +198,7 @@ class UpdaterMod(loader.Module):
             if manual_update:
                 m = await self.inline.bot.send_photo(
                     self.tg_id,
-                    "https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/updated.png",
+                    "https://kappa.lol/LJ1ooC",
                     caption=self.strings("update_required").format(
                         utils.get_git_hash()[:6],
                         f'<a href="{REPO_URL}/compare/{{}}...{{}}">{{}}</a>'.format(
@@ -221,7 +221,7 @@ class UpdaterMod(loader.Module):
             else:
                 m = await self.inline.bot.send_photo(
                     self.tg_id,
-                    "https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/updated.png",
+                    "https://kappa.lol/LJ1ooC",
                     caption=self.strings("autoupdate_notifier").format(
                         self.get_latest()[:6],
                         self.get_changelog(),
@@ -270,7 +270,7 @@ class UpdaterMod(loader.Module):
             changelog = f.read().split("##")[1].strip()
         if (await self._client.get_me()).premium:
             changelog.replace(
-                "🌑 Heroku",
+                "🌑 Ratko",
                 "<tg-emoji emoji-id=5192765204898783881>🌘</tg-emoji><tg-emoji emoji-id=5195311729663286630>🌘</tg-emoji><tg-emoji emoji-id=5195045669324201904>🌘</tg-emoji>",
             )
 
