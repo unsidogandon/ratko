@@ -36,6 +36,8 @@ from .._internal import restart
 from ..inline.types import BotInlineCall, InlineCall
 
 logger = logging.getLogger(__name__)
+REPO_URL = "https://github.com/ewik3984747/ratko"
+REPO_API_URL = "https://api.github.com/repos/ewik3984747/ratko"
 
 
 def _is_no_git() -> bool:
@@ -43,7 +45,7 @@ def _is_no_git() -> bool:
 
 
 def _repo_path() -> str:
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    return os.path.abspath(os.path.join(utils.get_base_dir(), ".."))
 
 
 @loader.tds
@@ -57,7 +59,7 @@ class UpdaterMod(loader.Module):
         self.config = loader.ModuleConfig(
             loader.ConfigValue(
                 "GIT_ORIGIN_URL",
-                "https://github.com/coddrago/Heroku",
+                REPO_URL,
                 lambda: self.strings("origin_cfg_doc"),
                 validator=loader.validators.Link(),
             ),
@@ -93,7 +95,7 @@ class UpdaterMod(loader.Module):
         if _is_no_git():
             return False
         try:
-            with git.Repo(_repo_path()) as repo:
+            with git.Repo() as repo:
                 for remote in repo.remotes:
                     remote.fetch()
 
@@ -117,7 +119,7 @@ class UpdaterMod(loader.Module):
         if _is_no_git():
             return ""
         try:
-            with git.Repo(_repo_path()) as repo:
+            with git.Repo() as repo:
                 return next(
                     repo.iter_commits(f"origin/{version.branch}", max_count=1)
                 ).hexsha
@@ -175,7 +177,7 @@ class UpdaterMod(loader.Module):
                 try:
                     async with aiohttp.ClientSession() as session:
                         r = await session.get(
-                            url=f"https://api.github.com/repos/coddrago/Heroku/contents/heroku/version.py?ref={version.branch}",
+                            url=f"{REPO_API_URL}/contents/heroku/version.py?ref={version.branch}",
                             headers={"Accept": "application/vnd.github.v3.raw"},
                         )
                         text = await r.text()
@@ -199,7 +201,7 @@ class UpdaterMod(loader.Module):
                     "https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/updated.png",
                     caption=self.strings("update_required").format(
                         utils.get_git_hash()[:6],
-                        '<a href="https://github.com/coddrago/Heroku/compare/{}...{}">{}</a>'.format(
+                        f'<a href="{REPO_URL}/compare/{{}}...{{}}">{{}}</a>'.format(
                             utils.get_git_hash()[:12],
                             self.get_latest()[:12],
                             self.get_latest()[:6],
@@ -223,7 +225,7 @@ class UpdaterMod(loader.Module):
                     caption=self.strings("autoupdate_notifier").format(
                         self.get_latest()[:6],
                         self.get_changelog(),
-                        '<a href="https://github.com/coddrago/Heroku/compare/{}...{}">{}</a>'.format(
+                        f'<a href="{REPO_URL}/compare/{{}}...{{}}">{{}}</a>'.format(
                             utils.get_git_hash()[:12],
                             self.get_latest()[:12],
                             "🔎 diff",
@@ -374,7 +376,7 @@ class UpdaterMod(loader.Module):
 
     async def download_common(self):
         try:
-            with Repo(os.path.dirname(utils.get_base_dir())) as repo:
+            with Repo() as repo:
                 origin = repo.remote("origin")
                 r = origin.pull()
                 new_commit = repo.head.commit
@@ -385,7 +387,7 @@ class UpdaterMod(loader.Module):
                                 return True
             return False
         except git.exc.InvalidGitRepositoryError:
-            repo = Repo.init(os.path.dirname(utils.get_base_dir()))
+            repo = Repo.init(os.getcwd())
             with repo:
                 origin = repo.create_remote("origin", self.config["GIT_ORIGIN_URL"])
                 origin.fetch()
@@ -430,7 +432,7 @@ class UpdaterMod(loader.Module):
         try:
             args = utils.get_args_raw(message)
             current = utils.get_git_hash()
-            with git.Repo(_repo_path()) as repo:
+            with git.Repo() as repo:
                 upcoming = next(
                     repo.iter_commits(f"origin/{version.branch}", max_count=1)
                 ).hexsha
@@ -527,7 +529,7 @@ class UpdaterMod(loader.Module):
 
     async def client_ready(self):
         try:
-            with git.Repo(_repo_path()):
+            with git.Repo():
                 pass
         except Exception:
             os.environ["HEROKU_NO_GIT"] = "1"

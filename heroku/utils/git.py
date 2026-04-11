@@ -17,6 +17,7 @@ from .. import version
 
 parser = herokutl.utils.sanitize_parse_mode("html")
 logger = logging.getLogger(__name__)
+REPO_URL = "https://github.com/ewik3984747/ratko"
 
 
 def _is_no_git() -> bool:
@@ -34,7 +35,7 @@ def get_git_info() -> typing.Tuple[str, str]:
     hash_ = get_git_hash()
     return (
         hash_,
-        f"https://github.com/coddrago/Heroku/commit/{hash_}" if hash_ else "",
+        f"{REPO_URL}/commit/{hash_}" if hash_ else "",
     )
 
 
@@ -62,7 +63,7 @@ def get_commit_url() -> str:
         hash_ = get_git_hash()
         if not hash_:
             return "Unknown"
-        return f'<a href="https://github.com/coddrago/Heroku/commit/{hash_}">#{hash_[:7]}</a>'
+        return f'<a href="{REPO_URL}/commit/{hash_}">#{hash_[:7]}</a>'
     except Exception:
         return "Unknown"
 
