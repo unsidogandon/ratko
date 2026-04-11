@@ -35,6 +35,35 @@ import getpass
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_INFO_BANNER = "https://files.catbox.moe/irus5b.jpg"
+OLD_INFO_BANNER = (
+    "https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/"
+    "heroku_info.png"
+)
+DEFAULT_INFO_MESSAGE = (
+    "<blockquote>влд: {me}</blockquote>\n"
+    "про ратко\n"
+    "<blockquote>ос {os}\n"
+    "версия платформа\n"
+    "{version}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{platform}</blockquote>\n"
+    "<blockquote>ping&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;uptime\n"
+    "🚀{ping}&nbsp;&nbsp;✨{uptime}</blockquote>\n"
+    "остальное\n"
+    "<blockquote>upd: {upd}\n"
+    "использование цп: {cpu_usage}\n"
+    "использование оперативы: {ram_usage}\n"
+    "ос: {os}\n"
+    "ядрышко: {kernel}\n"
+    "проц: {cpu}</blockquote>"
+)
+LEGACY_INFO_MARKERS = (
+    "Heroku",
+    "Heroku Userbot",
+    "Heroku supports",
+    "Friendly-Telegram",
+    "GeekTG",
+)
+
 
 @loader.tds
 class RatkoInfoMod(loader.Module):
@@ -46,6 +75,7 @@ class RatkoInfoMod(loader.Module):
         self.config = loader.ModuleConfig(
             loader.ConfigValue(
                 "custom_message",
+                DEFAULT_INFO_MESSAGE,
                 doc=lambda: (
                     self.strings("_cfg_cst_msg")
                     + "\n"
@@ -54,7 +84,7 @@ class RatkoInfoMod(loader.Module):
             ),
             loader.ConfigValue(
                 "banner_url",
-                "https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/heroku_info.png",
+                DEFAULT_INFO_BANNER,
                 lambda: self.strings("_cfg_banner"),
                 validator=loader.validators.RandomLink(),
             ),
@@ -86,6 +116,16 @@ class RatkoInfoMod(loader.Module):
                         return line.split("=")[1].strip().strip('"')
         except FileNotFoundError:
             return self.strings["non_detectable"]
+
+    def _get_effective_info_template(self) -> str:
+        custom_message = self.config["custom_message"]
+        if not custom_message:
+            return DEFAULT_INFO_MESSAGE
+
+        if any(marker in custom_message for marker in LEGACY_INFO_MARKERS):
+            return DEFAULT_INFO_MESSAGE
+
+        return custom_message
 
     async def _render_info(self, start: float) -> str:
         try:
@@ -157,53 +197,33 @@ class RatkoInfoMod(loader.Module):
             "htl_ver": herokutl.__version__,
             "git_status": utils.get_git_status(),
         }
-        data = await utils.get_placeholders(data, self.config["custom_message"])
-        if self.config["custom_message"]:
-            try:
-                placeholders_msg = self.config["custom_message"].format(**data)
-            except KeyError:
-                logger.exception("Missing placeholder in custom_message")
-                placeholders_msg = (
-                    "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji>"
-                )
-        return (
-            placeholders_msg
-            if self.config["custom_message"]
-            else self.strings["info_message"].format(
-                (
-                    utils.get_platform_emoji()
-                    if self._client.heroku_me.premium and self.config["show_heroku"]
-                    else ""
-                ),
-                me=me,
-                version=_version,
-                prefix=prefix,
-                uptime=utils.formatted_uptime(),
-                branch=version.branch,
-                cpu_usage=utils.get_cpu_usage(),
-                ram_usage=f"{utils.get_ram_usage()} MB",
-                ping=round((time.perf_counter_ns() - start) / 10**6, 3),
-                upd=upd,
-                platform=platform,
-                os=self._get_os_name() or self.strings("non_detectable"),
-                python_ver=lib_platform.python_version(),
-            )
-        )
+        template = self._get_effective_info_template()
+        data = await utils.get_placeholders(data, template)
+
+        try:
+            return template.format(**data)
+        except KeyError:
+            logger.exception("Missing placeholder in custom_message")
+            return DEFAULT_INFO_MESSAGE.format(**data)
 
     @loader.command()
     async def infocmd(self, message: Message):
         start = time.perf_counter_ns()
-        media = str(self.config["banner_url"])
+        banner_url = self.config["banner_url"] or DEFAULT_INFO_BANNER
+        if banner_url == OLD_INFO_BANNER:
+            banner_url = DEFAULT_INFO_BANNER
 
-        if self.config["banner_url"] and self.config["quote_media"] is True:
-            media = InputMediaWebPage(str(self.config["banner_url"]), optional=True)
+        media = str(banner_url)
 
-        elif not self.config["banner_url"]:
+        if banner_url and self.config["quote_media"] is True:
+            media = InputMediaWebPage(str(banner_url), optional=True)
+
+        elif not banner_url:
             media = None
 
         try:
             match True:
-                case _ if self.config["custom_message"] is None:
+                case _ if self._get_effective_info_template() == DEFAULT_INFO_MESSAGE:
                     await utils.answer(
                         message,
                         await self._render_info(start),
@@ -212,7 +232,7 @@ class RatkoInfoMod(loader.Module):
                         invert_media=self.config["invert_media"],
                     )
                 case _:
-                    if "{ping}" in self.config["custom_message"]:
+                    if "{ping}" in self._get_effective_info_template():
                         message = await utils.answer(message, self.config["ping_emoji"])
                     await utils.answer(
                         message,
@@ -225,7 +245,7 @@ class RatkoInfoMod(loader.Module):
             await utils.answer(
                 message,
                 self.strings["no_banner"].format(
-                    link=self.config["banner_url"],
+                    link=banner_url,
                 ),
                 reply_to=getattr(message, "reply_to_msg_id", None),
             )
