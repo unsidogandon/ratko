@@ -100,7 +100,7 @@ class TokenObtainment(InlineUnit):
             photo_id = ""
 
         data = {
-            "title": f"🪐 Heroku {utils.get_version_raw()}"[:64],
+            "title": f"🪐 ratko {utils.get_version_raw()}"[:64],
             "about": "",
             "username": username,
             "userpic": photo_id,

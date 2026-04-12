@@ -7,8 +7,8 @@
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
 # ©️ Codrago, 2024-2030
-# This file is a part of ratko userbot
-# 🌐 https://github.com/unsidogandon/ratko
+# This file is a part of Heroku Userbot
+# 🌐 https://github.com/coddrago/Heroku
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
@@ -506,7 +506,7 @@ def raise_auth():
     raise InteractiveAuthRequired()
 
 
-class ratko:
+class Heroku:
     """Main userbot instance, which can handle multiple clients"""
 
     def __init__(self):
@@ -684,7 +684,7 @@ class ratko:
             and not existing
         ):
             while bot := input(
-                "You can enter a custom bot username or leave it empty and ratko will generate a random one: "
+                "You can enter a custom bot username or leave it empty and Heroku will generate a random one: "
             ):
                 bot = bot.strip()
                 bot = bot.lstrip("@")
@@ -763,7 +763,7 @@ class ratko:
         await db.init()
 
         while bot := input(
-            "You can enter a custom bot username or leave it empty and ratko will generate a random one: "
+            "You can enter a custom bot username or leave it empty and Heroku will generate a random one: "
         ):
             try:
                 if await self._check_bot(client, bot):
@@ -1027,15 +1027,11 @@ class ratko:
                 build = "unknown"
                 upd = "Git disabled"
             else:
-                import git
-
                 try:
-                    repo = git.Repo(
-                        os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-                    )
                     build = utils.get_git_hash() or "unknown"
-                    diff = repo.git.log([f"HEAD..origin/{version.branch}", "--oneline"])
-                    upd = "Update required" if diff else "Up-to-date"
+                    if build == "unknown" or not utils.is_git_repo():
+                        raise RuntimeError
+                    upd = "Up-to-date" if utils.is_up_to_date() else "Update required"
                 except Exception:
                     os.environ["HEROKU_NO_GIT"] = "1"
                     build = "unknown"
@@ -1076,10 +1072,9 @@ class ratko:
                     .get_logs_topic_id_by_client(client.tg_id)
                 )
 
-                await client.heroku_inline.bot.send_photo(
+                await client.heroku_inline.bot.send_message(
                     log_chat_id,
-                    "https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/heroku_started.png",
-                    caption=(
+                    (
                         "{} <b>{} started!</b>\n\n<tg-emoji emoji-id=5231065262228250587>⚙</tg-emoji> <b>GitHub commit SHA: <a"
                         ' href="https://github.com/unsidogandon/ratko/commit/{}">{}</a></b>\n<tg-emoji emoji-id=5873225338984599714>🔎</tg-emoji>'
                         " <b>Update status: {}</b>\n<b>{}</b>\n<tg-emoji emoji-id=5870903672937911120>🕶</tg-emoji> <b>Prefix:</b> <code>{}</code>"
@@ -1262,4 +1257,4 @@ class ratko:
 
 herokutl.extensions.html.CUSTOM_EMOJIS = not get_config_key("disable_custom_emojis")
 
-heroku = ratko()
+heroku = Heroku()

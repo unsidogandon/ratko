@@ -92,39 +92,38 @@ class UpdaterMod(loader.Module):
         await self.inline.bot(call.answer(self.strings("autoupdate_on")))
 
     def get_changelog(self) -> str:
-        if _is_no_git():
+        if _is_no_git() or not utils.is_git_repo():
             return False
         try:
-            with git.Repo() as repo:
-                for remote in repo.remotes:
-                    remote.fetch()
-
-                if not (diff := [*repo.iter_commits(f"HEAD..origin/{version.branch}")]):
-                    return False
+            utils.run_git("fetch", "origin", version.branch, timeout=60)
+            raw_diff = utils.run_git(
+                "log",
+                "--format=%H%x1f%s",
+                f"HEAD..origin/{version.branch}",
+                timeout=30,
+            )
+            if not raw_diff:
+                return False
         except Exception:
             return False
 
+        commits = [line for line in raw_diff.splitlines() if line.strip()]
         res = "\n".join(
-            f"<b>{commit.hexsha[:7]}</b>:"
-            f" <i>{utils.escape_html(commit.message.splitlines()[0])}</i>"
-            for commit in diff[:10]
+            f"<b>{commit.split(chr(31), 1)[0][:7]}</b>:"
+            f" <i>{utils.escape_html(commit.split(chr(31), 1)[1])}</i>"
+            for commit in commits[:10]
+            if chr(31) in commit
         )
 
-        if diff.count("\n") >= 10:
-            res += self.strings("more").format(len(diff) - 10)
+        if len(commits) > 10:
+            res += self.strings("more").format(len(commits) - 10)
 
         return res
 
     def get_latest(self) -> str:
-        if _is_no_git():
+        if _is_no_git() or not utils.is_git_repo():
             return ""
-        try:
-            with git.Repo() as repo:
-                return next(
-                    repo.iter_commits(f"origin/{version.branch}", max_count=1)
-                ).hexsha
-        except Exception:
-            return ""
+        return utils.run_git("rev-parse", f"origin/{version.branch}")
 
     @loader.loop(interval=60, autostart=True)
     async def poller_announcement(self):
@@ -198,7 +197,7 @@ class UpdaterMod(loader.Module):
             if manual_update:
                 m = await self.inline.bot.send_photo(
                     self.tg_id,
-                    "https://kappa.lol/LJ1ooC",
+                    "https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/updated.png",
                     caption=self.strings("update_required").format(
                         utils.get_git_hash()[:6],
                         f'<a href="{REPO_URL}/compare/{{}}...{{}}">{{}}</a>'.format(
@@ -221,7 +220,7 @@ class UpdaterMod(loader.Module):
             else:
                 m = await self.inline.bot.send_photo(
                     self.tg_id,
-                    "https://kappa.lol/LJ1ooC",
+                    "https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/updated.png",
                     caption=self.strings("autoupdate_notifier").format(
                         self.get_latest()[:6],
                         self.get_changelog(),
@@ -270,7 +269,7 @@ class UpdaterMod(loader.Module):
             changelog = f.read().split("##")[1].strip()
         if (await self._client.get_me()).premium:
             changelog.replace(
-                "🌑 Ratko",
+                "🌑 Heroku",
                 "<tg-emoji emoji-id=5192765204898783881>🌘</tg-emoji><tg-emoji emoji-id=5195311729663286630>🌘</tg-emoji><tg-emoji emoji-id=5195045669324201904>🌘</tg-emoji>",
             )
 
@@ -376,24 +375,33 @@ class UpdaterMod(loader.Module):
 
     async def download_common(self):
         try:
-            with Repo() as repo:
-                origin = repo.remote("origin")
-                r = origin.pull()
-                new_commit = repo.head.commit
-                for info in r:
-                    if info.old_commit:
-                        for d in new_commit.diff(info.old_commit):
-                            if d.b_path == "requirements.txt":
-                                return True
-            return False
-        except git.exc.InvalidGitRepositoryError:
-            repo = Repo.init(os.getcwd())
-            with repo:
-                origin = repo.create_remote("origin", self.config["GIT_ORIGIN_URL"])
-                origin.fetch()
-                repo.create_head("master", origin.refs.master)
-                repo.heads.master.set_tracking_branch(origin.refs.master)
-                repo.heads.master.checkout(True)
+            if not utils.is_git_repo():
+                return False
+
+            old_commit = utils.get_git_hash()
+            utils.run_git("fetch", "origin", version.branch, check=True, timeout=120)
+            utils.run_git(
+                "pull",
+                "--ff-only",
+                "origin",
+                version.branch,
+                check=True,
+                timeout=120,
+            )
+            new_commit = utils.get_git_hash()
+
+            if not old_commit or not new_commit or old_commit == new_commit:
+                return False
+
+            return "requirements.txt" in utils.run_git(
+                "diff",
+                "--name-only",
+                f"{old_commit}..{new_commit}",
+                "--",
+                "requirements.txt",
+                timeout=30,
+            ).splitlines()
+        except subprocess.CalledProcessError:
             return False
 
     @staticmethod
@@ -432,10 +440,7 @@ class UpdaterMod(loader.Module):
         try:
             args = utils.get_args_raw(message)
             current = utils.get_git_hash()
-            with git.Repo() as repo:
-                upcoming = next(
-                    repo.iter_commits(f"origin/{version.branch}", max_count=1)
-                ).hexsha
+            upcoming = self.get_latest()
             if (
                 "-f" in args
                 or not self.inline.init_complete
@@ -513,7 +518,7 @@ class UpdaterMod(loader.Module):
                 self.req_common()
 
             await self.restart_common(msg_obj)
-        except GitCommandError:
+        except (GitCommandError, subprocess.CalledProcessError):
             if not hard:
                 await self.inline_update(msg_obj, True)
                 return
@@ -528,10 +533,7 @@ class UpdaterMod(loader.Module):
         )
 
     async def client_ready(self):
-        try:
-            with git.Repo():
-                pass
-        except Exception:
+        if not utils.is_git_repo():
             os.environ["HEROKU_NO_GIT"] = "1"
             logger.info("Git repository not found, updater will run in no-git mode")
 

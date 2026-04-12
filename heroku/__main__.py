@@ -22,7 +22,7 @@ from ._internal import restart
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
-if "--no-git" in sys.argv or not os.path.exists(os.path.join(BASE_DIR, ".git")):
+if "--no-git" in sys.argv:
     os.environ["HEROKU_NO_GIT"] = "1"
 
 

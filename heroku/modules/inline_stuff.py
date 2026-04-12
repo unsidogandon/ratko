@@ -131,7 +131,7 @@ class InlineStuff(loader.Module):
                             [
                                 {
                                     "text": "GitHub",
-                                    "url": "https://github.com/coddrago/Heroku",
+                                    "url": "https://github.com/unsidogandon/ratko",
                                     "emoji_id": "5231065262228250587",
                                 }
                             ],

@@ -10,40 +10,51 @@ import os
 import subprocess
 import typing
 
-import git
 import herokutl
 
 from .. import version
 
 parser = herokutl.utils.sanitize_parse_mode("html")
 logger = logging.getLogger(__name__)
-DEFAULT_REPO_URL = "https://github.com/unsidogandon/ratko"
+REPO_URL = "https://github.com/unsidogandon/ratko"
+
+
+def _repo_path() -> str:
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+
+def run_git(*args: str, check: bool = False, timeout: int = 15) -> str:
+    try:
+        process = subprocess.run(
+            ["git", "-C", _repo_path(), *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except Exception:
+        if check:
+            raise
+        return ""
+
+    if process.returncode != 0:
+        if check:
+            raise subprocess.CalledProcessError(
+                process.returncode,
+                process.args,
+                output=process.stdout,
+                stderr=process.stderr,
+            )
+        return ""
+
+    return process.stdout.strip()
+
+
+def is_git_repo() -> bool:
+    return bool(run_git("rev-parse", "--show-toplevel"))
 
 
 def _is_no_git() -> bool:
     return os.environ.get("HEROKU_NO_GIT") == "1"
-
-
-def _get_repo_url() -> str:
-    if _is_no_git():
-        return DEFAULT_REPO_URL
-
-    try:
-        url = git.Repo().remote("origin").url.strip()
-    except Exception:
-        return DEFAULT_REPO_URL
-
-    if url.startswith("git@github.com:"):
-        url = f"https://github.com/{url.removeprefix('git@github.com:')}"
-    elif url.startswith("ssh://git@github.com/"):
-        url = f"https://github.com/{url.removeprefix('ssh://git@github.com/')}"
-    elif url.startswith("http://github.com/"):
-        url = f"https://github.com/{url.removeprefix('http://github.com/')}"
-
-    if url.endswith(".git"):
-        url = url[:-4]
-
-    return url or DEFAULT_REPO_URL
 
 
 # GeekTG Compatibility
@@ -55,10 +66,9 @@ def get_git_info() -> typing.Tuple[str, str]:
     if _is_no_git():
         return ("", "")
     hash_ = get_git_hash()
-    repo_url = _get_repo_url()
     return (
         hash_,
-        f"{repo_url}/commit/{hash_}" if hash_ else "",
+        f"{REPO_URL}/commit/{hash_}" if hash_ else "",
     )
 
 
@@ -69,10 +79,7 @@ def get_git_hash() -> str:
     """
     if _is_no_git():
         return ""
-    try:
-        return git.Repo().head.commit.hexsha
-    except Exception:
-        return ""
+    return run_git("rev-parse", "HEAD")
 
 
 def get_commit_url() -> str:
@@ -86,7 +93,7 @@ def get_commit_url() -> str:
         hash_ = get_git_hash()
         if not hash_:
             return "Unknown"
-        return f'<a href="{_get_repo_url()}/commit/{hash_}">#{hash_[:7]}</a>'
+        return f'<a href="{REPO_URL}/commit/{hash_}">#{hash_[:7]}</a>'
     except Exception:
         return "Unknown"
 
@@ -98,17 +105,9 @@ def get_git_status() -> str:
     if _is_no_git():
         return "Git disabled"
     try:
-        process = subprocess.run(
-            ["git", "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-
-        if process.returncode != 0:
+        output = run_git("status", "--porcelain", timeout=5)
+        if output == "" and not is_git_repo():
             return "Not a Git repo"
-
-        output = process.stdout.strip()
 
         if not output:
             return "Clean"
@@ -130,11 +129,7 @@ def get_last_commit_message() -> str:
     """
     if _is_no_git():
         return "Unknown"
-    try:
-        repo = git.Repo()
-        return repo.head.commit.message.strip()
-    except Exception:
-        return "Unknown"
+    return run_git("log", "-1", "--pretty=%B") or "Unknown"
 
 
 def get_commit_count() -> int:
@@ -145,13 +140,12 @@ def get_commit_count() -> int:
     if _is_no_git():
         return 0
     try:
-        repo = git.Repo()
-        return len(list(repo.iter_commits()))
+        return int(run_git("rev-list", "--count", "HEAD") or 0)
     except Exception:
         return 0
 
 
 def is_up_to_date():
-    repo = git.Repo(search_parent_directories=True)
-    diff = any(repo.iter_commits(f"HEAD..origin/{version.branch}", max_count=1))
-    return not diff
+    if _is_no_git() or not is_git_repo():
+        return False
+    return not bool(run_git("rev-list", "--max-count=1", f"HEAD..origin/{version.branch}"))
