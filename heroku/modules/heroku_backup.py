@@ -272,9 +272,6 @@ class RatkoBackupMod(loader.Module):
                 with zf.open("db.json") as f:
                     db_data = orjson.loads(f.read().decode())
 
-                with contextlib.suppress(KeyError):
-                    db_data["heroku.inline"].pop("bot_token")
-
                 if not self._db.process_db_autofix(db_data):
                     raise RuntimeError("Attempted to restore broken database")
 
@@ -405,9 +402,6 @@ class RatkoBackupMod(loader.Module):
                 ],
             )
             return
-
-        with contextlib.suppress(KeyError):
-            decoded_text["heroku.inline"].pop("bot_token")
 
         if not self._db.process_db_autofix(decoded_text):
             raise RuntimeError("Attempted to restore broken database")
@@ -640,9 +634,6 @@ class RatkoBackupMod(loader.Module):
 
                 with zf.open("db.json") as f:
                     db_data = orjson.loads(f.read().decode())
-
-                with contextlib.suppress(KeyError):
-                    db_data["heroku.inline"].pop("bot_token")
 
                 if not self._db.process_db_autofix(db_data):
                     raise RuntimeError("Attempted to restore broken database")

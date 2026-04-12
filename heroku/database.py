@@ -55,6 +55,16 @@ __all__ = [
 logger = logging.getLogger(__name__)
 _DB_PROTECTED_OWNERS = {"RatkoPluginSecurity", "HerokuPluginSecurity"}
 _DB_ALLOWED_WRITERS = {f"{__package__}.modules.heroku_plugin_security"}
+_LEGACY_OWNER_MIGRATIONS = {
+    "HerokuBackupMod": "RatkoBackupMod",
+    "HerokuConfigMod": "RatkoConfigMod",
+    "HerokuInfoMod": "RatkoInfoMod",
+    "HerokuPluginSecurity": "RatkoPluginSecurity",
+    "HerokuSecurityMod": "RatkoSecurityMod",
+    "HerokuSettingsMod": "RatkoSettingsMod",
+    "HerokuWebMod": "RatkoWebMod",
+}
+_LEGACY_OWNER_FALLBACKS = {v: k for k, v in _LEGACY_OWNER_MIGRATIONS.items()}
 
 
 class NoAssetsChannel(Exception):
@@ -198,13 +208,37 @@ class Database(dict):
         except FileNotFoundError:
             logger.debug("Database file not found, creating new one...")
 
+    @staticmethod
+    def _migrate_legacy_owners(db: dict) -> None:
+        if not isinstance(db, dict):
+            return
+
+        for old_owner, new_owner in _LEGACY_OWNER_MIGRATIONS.items():
+            old_data = db.get(old_owner)
+            if not isinstance(old_data, dict):
+                continue
+
+            new_data = db.get(new_owner, {})
+            if not isinstance(new_data, dict):
+                new_data = {}
+
+            merged = dict(old_data)
+            merged.update(new_data)
+            db[new_owner] = merged
+
+            if old_owner in db:
+                del db[old_owner]
+
     def _update_from_read(self, items: dict) -> None:
         """Update DB from persisted storage without write-protection checks."""
+        self._migrate_legacy_owners(items)
         super().update(items)
 
     def process_db_autofix(self, db: dict) -> bool:
         if not utils.is_serializable(db):
             return False
+
+        self._migrate_legacy_owners(db)
 
         for key, value in db.copy().items():
             if not isinstance(key, (str, int)):
@@ -347,6 +381,13 @@ class Database(dict):
         try:
             return self[owner][key]
         except KeyError:
+            legacy_owner = _LEGACY_OWNER_FALLBACKS.get(owner)
+            if legacy_owner:
+                try:
+                    return self[legacy_owner][key]
+                except KeyError:
+                    pass
+
             return default
 
     def set(self, owner: str, key: str, value: JSONSerializable) -> bool:
