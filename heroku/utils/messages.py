@@ -45,6 +45,10 @@ TG_EMOJI_TAG_PATTERN = re.compile(
     r"<tg-emoji\s+emoji-id=(?:\"([^\"]+)\"|'([^']+)'|([^\s>]+))>(.*?)</tg-emoji>",
     flags=re.IGNORECASE | re.DOTALL,
 )
+LEGACY_EMOJI_TAG_PATTERN = re.compile(
+    r"<emoji\s+document_id=(?:\"([^\"]+)\"|'([^']+)'|([^\s>]+))>(.*?)</emoji>",
+    flags=re.IGNORECASE | re.DOTALL,
+)
 
 
 def use_exteragram_emoji_links(message: typing.Any) -> bool:
@@ -67,7 +71,9 @@ def use_exteragram_emoji_links(message: typing.Any) -> bool:
 
 
 def replace_tg_emoji_tags(response: str, message: typing.Any) -> str:
-    if not isinstance(response, str) or "<tg-emoji" not in response:
+    if not isinstance(response, str) or (
+        "<tg-emoji" not in response and "<emoji" not in response
+    ):
         return response
 
     if not use_exteragram_emoji_links(message):
@@ -78,7 +84,9 @@ def replace_tg_emoji_tags(response: str, message: typing.Any) -> str:
         emoji = match.group(4)
         return f'<a href="tg://emoji?id={emoji_id}">{emoji}</a>'
 
-    return TG_EMOJI_TAG_PATTERN.sub(_replace, response)
+    response = TG_EMOJI_TAG_PATTERN.sub(_replace, response)
+    response = LEGACY_EMOJI_TAG_PATTERN.sub(_replace, response)
+    return response
 
 
 def get_topic(message: Message) -> typing.Optional[int]:
