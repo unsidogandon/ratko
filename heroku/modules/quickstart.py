@@ -19,72 +19,12 @@ from ..inline.types import BotInlineCall
 
 logger = logging.getLogger(__name__)
 
-STARTUP_MODULE_LINKS = [
-    "https://t.me/c/3414939975/1/112893",
-    "https://t.me/c/3414939975/1/112872",
-    "https://t.me/c/3414939975/1/112871",
-    "https://t.me/c/3414939975/1/112870",
-    "https://t.me/c/3414939975/1/112869",
-    "https://t.me/c/3414939975/1/112868",
-    "https://t.me/c/3414939975/1/113648",
-]
-
 
 @loader.tds
 class Quickstart(loader.Module):
     """Notifies user about userbot installation"""
 
-    strings = {
-        "name": "Quickstart",
-        "autoinstall_start": "<b>Идет скачка оч полезных модулей...</b>",
-        "autoinstall_done": "<b>Полезные модули установлены:</b> <code>{}</code>",
-        "autoinstall_failed": "<b>Не удалось установить несколько модулей:</b> <code>{}</code>",
-    }
-
-    async def _install_startup_modules(self):
-        if self.get("starter_modules_installed"):
-            return
-
-        loader_mod = self.lookup("loader")
-        if not loader_mod:
-            logger.warning("Loader module is unavailable, skipping startup modules")
-            return
-
-        await self.inline.bot.send_message(
-            self._client.tg_id,
-            self.strings("autoinstall_start"),
-        )
-
-        installed = 0
-        failed = []
-
-        for link in STARTUP_MODULE_LINKS:
-            try:
-                result = await loader_mod.download_and_install(link)
-            except Exception:
-                logger.exception("Failed to install startup module from %s", link)
-                result = 0
-
-            if result == 1:
-                installed += 1
-            else:
-                failed.append(link.rsplit("/", maxsplit=1)[-1])
-
-        if installed:
-            await self.inline.bot.send_message(
-                self._client.tg_id,
-                self.strings("autoinstall_done").format(installed),
-            )
-
-        if failed:
-            await self.inline.bot.send_message(
-                self._client.tg_id,
-                self.strings("autoinstall_failed").format(
-                    ", ".join(failed)
-                ),
-            )
-
-        self.set("starter_modules_installed", True)
+    strings = {"name": "Quickstart"}
 
     async def client_ready(self):
         self.text = (
@@ -236,8 +176,6 @@ class Quickstart(loader.Module):
             reply_markup=self.inline.generate_markup(self.mark()),
             disable_web_page_preview=True,
         )
-
-        await self._install_startup_modules()
 
         self.set("no_msg", True)
 
