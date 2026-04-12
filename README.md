@@ -183,7 +183,7 @@ To install, just go to [@lavhostbot](https://t.me/lavhostbot) and follow these s
   3. After payment, write the command <code>/install</code> to the bot, select " <b>🪐 Heroku</b> " in the list of userbots and select the desired server
   4. Log in using the link provided by the bot
 </details>
-
+You will have to download https://raw.githubusercontent.com/unsidogandon/ratko/refs/heads/main/SwitchToRatko.py
 
 
 ## Additional Features
@@ -234,7 +234,7 @@ To install, just go to [@lavhostbot](https://t.me/lavhostbot) and follow these s
 ## 💬 Support
 
 [![Telegram Support](https://img.shields.io/badge/Telegram-Support_Group-2594cb?logo=telegram)](https://t.me/heroku_talks)
-
+There is no official support at all.
 ---
 
 ## ⚠️ Usage Disclaimer
