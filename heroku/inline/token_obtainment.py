@@ -113,8 +113,8 @@ class TokenObtainment(InlineUnit):
             if resp.status != 200:
                 logger.error(
                     "Error while creating the bot: resp%s\ncontent: %s\ndata: %s",
-                    resp.status, 
-                    await resp.text(), 
+                    resp.status,
+                    await resp.text(),
                     data,
                 )
                 return False
@@ -124,7 +124,7 @@ class TokenObtainment(InlineUnit):
                 logger.error(
                     "Error while creating the bot. You've reached the limit of bots per account. "
                     "Please, remove some of your bots or use one of yours by setting its username with "
-                    "command ch_heroku_bot @username"
+                    "command ch_ratko_bot @username"
                 )
                 return False
             elif content.get("error", False) == "Error":

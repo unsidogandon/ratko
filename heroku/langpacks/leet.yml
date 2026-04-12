@@ -394,7 +394,7 @@ inline_stuff:
   profile_cmd: "ℹ️ Us3rb07 M41n 1nf0\n\n<blockquote>• Pr3f1x: {prefix}\n• RAM U54g3: {ram_usage} MB\n• CPU U54g3: {cpu_usage}%\n• H0571ng: {host}</blockquote>"
   restart: "🔄 Ur ratko 15 b31ng r3574r73d.."
   prefix_reset: "🔀 Pr3f1x r3537!"
-  _cmd_doc_ch_heroku_bot: "<username> - Ch4ng3 ur ratko 1nl1n3 b07 u53rn4m3"
+  _cmd_doc_ch_ratko_bot: "<username> - Ch4ng3 ur ratko 1nl1n3 b07 u53rn4m3"
   _cls_doc: "Pr0v1d35 supp0r7 4 1nl1n3 57uff"
 
 test:
@@ -406,7 +406,7 @@ test:
   hint: "S37 4 h1n7"
   ping_emoji: "3m0j1 7h47 4pp34r5 wh3n p1ng d035 n07 1ncr3453 51gn1f1c4n7ly"
   back: "↩️ B4ck"
-  banner_url: "1m4g3 4 ur p1ng, e.g.: https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/ping_cmd.png"
+  banner_url: "1m4g3 4 ur p1ng, e.g.: https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg"
   logs_caption: "<tg-emoji emoji-id=5350594756126721186>🪐</tg-emoji> <b>ratko l0g5 w17h v3rb0517y</b> <code>{}</code>\n\n<tg-emoji emoji-id=5228879218363872764>⚪️</tg-emoji> <b>V3r510n: {}.{}.{}</b>{}"
   suspend_invalid_time: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>1nv4l1d 71m3 2 su5p3nd</b>"
   suspended: "<tg-emoji emoji-id=5452023368054216810>🥶</tg-emoji> <b>B07 su5p3nd3d 4 {}</b>"
@@ -714,4 +714,4 @@ $inline:
   command: "🪐 Cmd «{}»"
   button403: "U r n07 4ll0w3d 2 pr355 7h15 bu770n!"
   keep_id: "⚠️ D0 n07 r3m0v3 ID! {}"
-  no_query_results: "<tg-emoji emoji-id=5440660757194744323>‼️</tg-emoji> <b>F41L3D 70 CR34T3 F0RM</b>\n\nP0551BL3 W4Y5 70 F1X 7H3 3RR0R:\n\n1. R3574RT ratko: <code>{prefix}restart</code>\n\n2. 3N4BL3 1NL1N3 M0D3 F0R 7H3 B07: G0 70 @B07F47H3R, 53ND /MYB075, CL1CK B07 53771N65 -> 1NL1N3 M0D3 -> 0N\n\n3. CR34T3 4 N3W B07: 53ND 7H3 C0MM4ND <code>{prefix}ch_heroku_bot</code> <@B07N4M3>"
+  no_query_results: "<tg-emoji emoji-id=5440660757194744323>‼️</tg-emoji> <b>F41L3D 70 CR34T3 F0RM</b>\n\nP0551BL3 W4Y5 70 F1X 7H3 3RR0R:\n\n1. R3574RT ratko: <code>{prefix}restart</code>\n\n2. 3N4BL3 1NL1N3 M0D3 F0R 7H3 B07: G0 70 @B07F47H3R, 53ND /MYB075, CL1CK B07 53771N65 -> 1NL1N3 M0D3 -> 0N\n\n3. CR34T3 4 N3W B07: 53ND 7H3 C0MM4ND <code>{prefix}ch_ratko_bot</code> <@B07N4M3>"

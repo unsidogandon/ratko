@@ -202,7 +202,7 @@ class UpdaterMod(loader.Module):
             if manual_update:
                 m = await self.inline.bot.send_photo(
                     self.tg_id,
-                    "https://raw.githubusercontent.com/unsidogandon/ratko/main/upd.jpg",
+                    "https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",
                     caption=self._exteragram_text(
                         self.strings("update_required").format(
                             utils.get_git_hash()[:6],
@@ -227,7 +227,7 @@ class UpdaterMod(loader.Module):
             else:
                 m = await self.inline.bot.send_photo(
                     self.tg_id,
-                    "https://raw.githubusercontent.com/unsidogandon/ratko/main/upd.jpg",
+                    "https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",
                     caption=self._exteragram_text(
                         self.strings("autoupdate_notifier").format(
                             self.get_latest()[:6],
@@ -583,7 +583,7 @@ class UpdaterMod(loader.Module):
         if not self.config["autoupdate"] and not self.get("autoupdate", False):
             await self.inline.bot.send_photo(
                 self.tg_id,
-                photo="https://raw.githubusercontent.com/unsidogandon/ratko/main/upd.jpg",
+                photo="https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",
                 caption=self._exteragram_text(self.strings("autoupdate")),
                 reply_markup=self.inline.generate_markup(
                     [

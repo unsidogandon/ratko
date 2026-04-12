@@ -394,7 +394,7 @@ inline_stuff:
   profile_cmd: "ℹ️ System Status\n\n<blockquote>• Prefix: {prefix}\n• RAM: {ram_usage} MB\n• CPU: {cpu_usage}%\n• Host: {host}</blockquote>"
   restart: "🔄 Restarting daemon.."
   prefix_reset: "🔀 Prefix reset."
-  _cmd_doc_ch_heroku_bot: "<username> - Change inline bot username"
+  _cmd_doc_ch_ratko_bot: "<username> - Change inline bot username"
   _cls_doc: "Inline Mode Handler"
 
 test:
@@ -714,4 +714,4 @@ $inline:
   command: "🪐 CMD «{}»"
   button403: "Access Denied"
   keep_id: "⚠️ Don't delete ID! {}"
-  no_query_results: "<tg-emoji emoji-id=5440660757194744323>‼️</tg-emoji> <b>Failed to create form</b>\n\nPossible ways to fix the error:\n\n1. Restart ratko: <code>{prefix}restart</code>\n\n2. Enable inline mode for the bot: go to @BotFather, send /mybots, click Bot Settings -> Inline Mode -> On\n\n3. Create a new bot: send the command <code>{prefix}ch_heroku_bot</code> <@botname>"
+  no_query_results: "<tg-emoji emoji-id=5440660757194744323>‼️</tg-emoji> <b>Failed to create form</b>\n\nPossible ways to fix the error:\n\n1. Restart ratko: <code>{prefix}restart</code>\n\n2. Enable inline mode for the bot: go to @BotFather, send /mybots, click Bot Settings -> Inline Mode -> On\n\n3. Create a new bot: send the command <code>{prefix}ch_ratko_bot</code> <@botname>"

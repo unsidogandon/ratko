@@ -43,7 +43,7 @@ class RatkoBackupMod(loader.Module):
         if not self.get("period"):
             await self.inline.bot.send_photo(
                 self.tg_id,
-                photo="https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/unit_alpha.png",
+                photo="https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",
                 caption=self.strings("period"),
                 reply_markup=self.inline.generate_markup(
                     utils.chunks(
@@ -74,22 +74,26 @@ class RatkoBackupMod(loader.Module):
     async def _get_reqs(self) -> bytes:
 
         proc = await asyncio.create_subprocess_exec(
-            sys.executable, "-m", "pip", "freeze",
-            stdout=asyncio.subprocess.PIPE
+            sys.executable, "-m", "pip", "freeze", stdout=asyncio.subprocess.PIPE
         )
         stdout, _ = await proc.communicate()
         return stdout
 
     async def _install_reqs(self, reqs: bytes):
-        
+
         temp_file = f"reqs_{time.time()}.txt"
         with open(temp_file, "wb") as f:
             f.write(reqs)
         try:
             proc = await asyncio.create_subprocess_exec(
-                sys.executable, "-m", "pip", "install", "-r", temp_file,
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "-r",
+                temp_file,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             await proc.wait()
         finally:
@@ -188,7 +192,7 @@ class RatkoBackupMod(loader.Module):
 
             mods.seek(0)
             mods.name = "mods.zip"
-            
+
             reqs = await self._get_reqs()
             pip_filename = f"pip-backup-{datetime.datetime.now():%d-%m-%Y-%H-%M}.txt"
 
@@ -253,7 +257,14 @@ class RatkoBackupMod(loader.Module):
 
             zipfile_bytes = io.BytesIO(file)
             with zipfile.ZipFile(zipfile_bytes) as zf:
-                pip_file = next((n for n in zf.namelist() if n.startswith("pip-backup-") and n.endswith(".txt")), None)
+                pip_file = next(
+                    (
+                        n
+                        for n in zf.namelist()
+                        if n.startswith("pip-backup-") and n.endswith(".txt")
+                    ),
+                    None,
+                )
                 if pip_file:
                     reqs = zf.read(pip_file)
                     await self._install_reqs(reqs)
@@ -363,7 +374,6 @@ class RatkoBackupMod(loader.Module):
 
         file = await reply.download_media(bytes)
         try:
-
             decoded_text = orjson.loads(file.decode())
 
         except UnicodeDecodeError as e:
@@ -420,7 +430,7 @@ class RatkoBackupMod(loader.Module):
             self.lookup("Loader").get("loaded_modules", {}),
             option=orjson.OPT_INDENT_2 | orjson.OPT_NON_STR_KEYS,
         )
-        
+
         reqs = await self._get_reqs()
         pip_filename = f"pip-backup-{datetime.datetime.now():%d-%m-%Y-%H-%M}.txt"
 
@@ -486,7 +496,14 @@ class RatkoBackupMod(loader.Module):
                 file.name = "mods.zip"
 
                 with zipfile.ZipFile(file) as zf:
-                    pip_file = next((n for n in zf.namelist() if n.startswith("pip-backup-") and n.endswith(".txt")), None)
+                    pip_file = next(
+                        (
+                            n
+                            for n in zf.namelist()
+                            if n.startswith("pip-backup-") and n.endswith(".txt")
+                        ),
+                        None,
+                    )
                     if pip_file:
                         reqs = zf.read(pip_file)
                         await self._install_reqs(reqs)
@@ -504,7 +521,9 @@ class RatkoBackupMod(loader.Module):
                             self.lookup("Loader").set("loaded_modules", db_mods)
 
                     for name in zf.namelist():
-                        if name == "db_mods.json" or (name.startswith("pip-backup-") and name.endswith(".txt")):
+                        if name == "db_mods.json" or (
+                            name.startswith("pip-backup-") and name.endswith(".txt")
+                        ):
                             continue
 
                         path = loader.LOADED_MODULES_PATH / Path(name).name
@@ -550,7 +569,7 @@ class RatkoBackupMod(loader.Module):
 
         mods.seek(0)
         mods.name = "mods.zip"
-        
+
         reqs = await self._get_reqs()
         pip_filename = f"pip-backup-{datetime.datetime.now():%d-%m-%Y-%H-%M}.txt"
 
@@ -607,7 +626,14 @@ class RatkoBackupMod(loader.Module):
         try:
             zipfile_bytes = io.BytesIO(file)
             with zipfile.ZipFile(zipfile_bytes) as zf:
-                pip_file = next((n for n in zf.namelist() if n.startswith("pip-backup-") and n.endswith(".txt")), None)
+                pip_file = next(
+                    (
+                        n
+                        for n in zf.namelist()
+                        if n.startswith("pip-backup-") and n.endswith(".txt")
+                    ),
+                    None,
+                )
                 if pip_file:
                     reqs = zf.read(pip_file)
                     await self._install_reqs(reqs)

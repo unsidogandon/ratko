@@ -70,7 +70,7 @@ class InlineStuff(loader.Module):
             return True
 
     @loader.command()
-    async def ch_heroku_bot(self, message: Message):
+    async def ch_ratko_bot(self, message: Message):
         args = utils.get_args_raw(message).strip("@")
 
         if not args:
@@ -117,7 +117,7 @@ class InlineStuff(loader.Module):
         match message.text:
             case "/start":
                 await message.answer_photo(
-                    "https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/start_cmd.png",
+                    "https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",
                     caption=self.strings("this_is_heroku").format(
                         (
                             "<tg-emoji emoji-id=5463379725441341739>🪐</tg-emoji>"
@@ -150,7 +150,7 @@ class InlineStuff(loader.Module):
                     pass
                 else:
                     await message.answer_photo(
-                        "https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/start_cmd.png",
+                        "https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",
                         caption=self.strings["profile_cmd"].format(
                             prefix=self.get_prefix(),
                             ram_usage=utils.get_ram_usage(),

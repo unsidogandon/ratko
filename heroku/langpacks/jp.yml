@@ -394,7 +394,7 @@ inline_stuff:
   profile_cmd: "ℹ️ ユーザーボット主要情報\n\n<blockquote>• プレフィックス: {prefix}\n• RAM 使用量: {ram_usage} MB\n• CPU 使用率: {cpu_usage}%\n• ホスティング: {host}</blockquote>"
   restart: "🔄 ratko を再起動しています..."
   prefix_reset: "🔀 プレフィックスをリセットしました！"
-  _cmd_doc_ch_heroku_bot: "<username> - ratko インラインボットのユーザー名を変更します"
+  _cmd_doc_ch_ratko_bot: "<username> - ratko インラインボットのユーザー名を変更します"
   _cls_doc: "インライン機能のサポートを提供します"
 
 test:
@@ -406,7 +406,7 @@ test:
   hint: "ヒントを設定"
   ping_emoji: "Ping が大幅に増加しない場合に表示される絵文字"
   back: "↩️ 戻る"
-  banner_url: "Ping 用の画像。例: https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/ping_cmd.png"
+  banner_url: "Ping 用の画像。例: https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg"
   logs_caption: "<tg-emoji emoji-id=5350594756126721186>🪐</tg-emoji> <b>詳細レベル</b> <code>{}</code> <b>の ratko ログ</b>\n\n<tg-emoji emoji-id=5228879218363872764>⚪️</tg-emoji> <b>バージョン: {}.{}.{}</b>{}"
   suspend_invalid_time: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>一時停止する時間が無効です</b>"
   suspended: "<tg-emoji emoji-id=5452023368054216810>🥶</tg-emoji> <b>ボットは {} 間一時停止されました</b>"
@@ -714,4 +714,4 @@ $inline:
   command: "🪐 コマンド «{}»"
   button403: "このボタンを押すことは許可されていません！"
   keep_id: "⚠️ ID を削除しないでください！ {}"
-  no_query_results: "<tg-emoji emoji-id=5440660757194744323>‼️</tg-emoji> <b>フォームの作成に失敗しました</b>\n\nエラー修正の可能な方法:\n\n1. ratkoを再起動: <code>{prefix}restart</code>\n\n2. ボットのインラインモードを有効化: @BotFatherに移動、/mybotsを送信、Bot Settings -> Inline Mode -> Onをクリック\n\n3. 新しいボットを作成: コマンド <code>{prefix}ch_heroku_bot</code> <@ボット名> を送信"
+  no_query_results: "<tg-emoji emoji-id=5440660757194744323>‼️</tg-emoji> <b>フォームの作成に失敗しました</b>\n\nエラー修正の可能な方法:\n\n1. ratkoを再起動: <code>{prefix}restart</code>\n\n2. ボットのインラインモードを有効化: @BotFatherに移動、/mybotsを送信、Bot Settings -> Inline Mode -> Onをクリック\n\n3. 新しいボットを作成: コマンド <code>{prefix}ch_ratko_bot</code> <@ボット名> を送信"

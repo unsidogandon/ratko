@@ -369,7 +369,7 @@ inline_stuff:
   profile_cmd: "ℹ️ Основная iнформацiя об юзiрботi\n\n<blockquote>• Прiфiкс: {prefix}\n• Использованii RAM: {ram_usage} МБ\n• Использованii CPU: {cpu_usage}%\n• Хостiнг: {host}</blockquote>"
   restart: "🔄 Ваша ratko пiрiзапускаiтся..."
   prefix_reset: "🔀 Прiфiкс сброшiн!"
-  _cmd_doc_ch_heroku_bot: "<юзiрнiйм> - Измiнiть юзiрнiйм iнлайн бота"
+  _cmd_doc_ch_ratko_bot: "<юзiрнiйм> - Измiнiть юзiрнiйм iнлайн бота"
 
 test:
   set_loglevel: "<tg-emoji emoji-id=5355133243773435190>🚫</tg-emoji> <b>Укажi уровiнь логов чiслом iлi строкой</b>"
@@ -379,7 +379,7 @@ test:
   hint: "Укажiтi подсказку"
   ping_emoji: "Эмодзi котороi появляiтся прi нi значiтiльном ростi пiнга."
   back: "↩️ Назад"
-  banner_url: "Картiнка для вашiго пiнга, для прiмiра: https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/ping_cmd.png"
+  banner_url: "Картiнка для вашiго пiнга, для прiмiра: https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg"
   logs_caption: "<tg-emoji emoji-id=5350594756126721186>🪐</tg-emoji> <b>Логi ratko уровня</b> <code>{}</code>\n\n<tg-emoji emoji-id=5228879218363872764>⚪️</tg-emoji> <b>Вiрсiя: {}.{}.{}</b>{}"
   debugging_enabled: "<tg-emoji emoji-id=5332533929020761310>✅</tg-emoji> <b>Рiжiм разработчiка включiн для модуля</b> <code>{0}</code>\n<i>Отправляйся в дiрiкторiю `debug_modules`, iзмiняй файл `{0}.py`, i смотрi iзмiнiнiя в рiжiмi рiального врiмiнi</i>"
   debugging_disabled: "<tg-emoji emoji-id=5332533929020761310>✅</tg-emoji> <b>Рiжiм разработчiка выключiн</b>"
@@ -694,4 +694,4 @@ $inline:
   command: "🪐 Команда «{}»"
   button403: "Вы нi можiтi нажать на эту кнопку!"
   keep_id: "⚠️ Нi удаляйтi ID! {}"
-  no_query_results: "<tg-emoji emoji-id=5440660757194744323>‼️</tg-emoji> <b>Нi удалось создать форму</b>\n\nВозможныi способы iсправлiнiя ошiбкi:\n\n1. Пiрiзагрузiтi ratko: <code>{prefix}restart</code>\n\n2. Включiтi inline-рiжiм для бота: пiрiйдiтi в @BotFather, отправьтi /mybots, нажмiтi Bot Settings -> Inline Mode -> On\n\n3. Создайтi нового бота: отправьтi команду <code>{prefix}ch_heroku_bot</code> <@iмя_бота>"
+  no_query_results: "<tg-emoji emoji-id=5440660757194744323>‼️</tg-emoji> <b>Нi удалось создать форму</b>\n\nВозможныi способы iсправлiнiя ошiбкi:\n\n1. Пiрiзагрузiтi ratko: <code>{prefix}restart</code>\n\n2. Включiтi inline-рiжiм для бота: пiрiйдiтi в @BotFather, отправьтi /mybots, нажмiтi Bot Settings -> Inline Mode -> On\n\n3. Создайтi нового бота: отправьтi команду <code>{prefix}ch_ratko_bot</code> <@iмя_бота>"

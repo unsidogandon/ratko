@@ -394,7 +394,7 @@ inline_stuff:
   profile_cmd: "ℹ️ Usewbot Main Infowmation\n\n<blockquote>• Pwefix: {prefix}\n• WAM Usage: {ram_usage} MB\n• CPU Usage: {cpu_usage}%\n• Hosting: {host}</blockquote>"
   restart: "🔄 Youw ratko is being westawted.."
   prefix_reset: "🔀 Pwefix weset!"
-  _cmd_doc_ch_heroku_bot: "<username> - Change youw ratko inwine bot usewnyame"
+  _cmd_doc_ch_ratko_bot: "<username> - Change youw ratko inwine bot usewnyame"
   _cls_doc: "Pwovides suppowt fow inwine stuff"
 
 test:
@@ -406,7 +406,7 @@ test:
   hint: "Set a hint"
   ping_emoji: "Emoji dat appeaws when ping does nyot incwease signyificantwy"
   back: "↩️ Back"
-  banner_url: "Image fow youw ping, fow exampwe: https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/ping_cmd.png"
+  banner_url: "Image fow youw ping, fow exampwe: https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg"
   logs_caption: "<tg-emoji emoji-id=5350594756126721186>🪐</tg-emoji> <b>ratko wogs with vewbosity</b> <code>{}</code>\n\n<tg-emoji emoji-id=5228879218363872764>⚪️</tg-emoji> <b>Vewsion: {}.{}.{}</b>{}"
   suspend_invalid_time: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Invawid time to suspend</b>"
   suspended: "<tg-emoji emoji-id=5452023368054216810>🥶</tg-emoji> <b>Bot suspended fow {}</b>"
@@ -714,4 +714,4 @@ $inline:
   command: "🪐 Command «{}»"
   button403: "You awe nyot awwowed to pwess dis button! >w<"
   keep_id: "⚠️ Do nyot wemove ID! {}"
-  no_query_results: "<tg-emoji emoji-id=5440660757194744323>‼️</tg-emoji> <b>Faiwed to cweate fowm UwU</b>\n\nPossibwe ways to fix the ewwow:\n\n1. Westawt ratko: <code>{prefix}westart</code>\n\n2. Enabwe inwine mode fow the bot: go to @BotFathew, send /mybots, cwick Bot Settings -> Inwine Mode -> On\n\n3. Cweate a new bot: send the command <code>{prefix}ch_heroku_bot</code> <@botname>"
+  no_query_results: "<tg-emoji emoji-id=5440660757194744323>‼️</tg-emoji> <b>Faiwed to cweate fowm UwU</b>\n\nPossibwe ways to fix the ewwow:\n\n1. Westawt ratko: <code>{prefix}westart</code>\n\n2. Enabwe inwine mode fow the bot: go to @BotFathew, send /mybots, cwick Bot Settings -> Inwine Mode -> On\n\n3. Cweate a new bot: send the command <code>{prefix}ch_ratko_bot</code> <@botname>"

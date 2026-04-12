@@ -35,11 +35,10 @@ import getpass
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_INFO_BANNER = "https://files.catbox.moe/irus5b.jpg"
-OLD_INFO_BANNER = (
-    "https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/"
-    "heroku_info.png"
+DEFAULT_INFO_BANNER = (
+    "https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg"
 )
+OLD_INFO_BANNER = "https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg"
 DEFAULT_INFO_MESSAGE = (
     "<blockquote>влд: {me}</blockquote>\n"
     "про ратко\n"
@@ -79,7 +78,14 @@ class RatkoInfoMod(loader.Module):
                 doc=lambda: (
                     self.strings("_cfg_cst_msg")
                     + "\n"
-                    + ("\n" + self.strings("_cfg_cst_ph").format("\n"+utils.config_placeholders()) if utils.config_placeholders() else "")
+                    + (
+                        "\n"
+                        + self.strings("_cfg_cst_ph").format(
+                            "\n" + utils.config_placeholders()
+                        )
+                        if utils.config_placeholders()
+                        else ""
+                    )
                 ),
             ),
             loader.ConfigValue(
@@ -146,7 +152,7 @@ class RatkoInfoMod(loader.Module):
             .replace("}", "")
         )
         build = utils.get_commit_url()
-        _version = f'<i>{".".join(list(map(str, list(version.__version__))))}</i>'
+        _version = f"<i>{'.'.join(list(map(str, list(version.__version__))))}</i>"
         prefix = f"«<code>{utils.escape_html(self.get_prefix())}</code>»"
 
         platform = utils.get_named_platform()

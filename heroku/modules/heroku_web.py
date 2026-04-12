@@ -51,7 +51,6 @@ class RatkoWebMod(loader.Module):
         if "JAMHOST" in os.environ:
             await utils.answer(message, self.strings["host_denied"])
         else:
-
             if "LAVHOST" in os.environ:
                 form = await self.inline.form(
                     self.strings("lavhost_web"),
@@ -60,7 +59,7 @@ class RatkoWebMod(loader.Module):
                         "text": self.strings("web_btn"),
                         "url": await main.heroku.web.get_url(proxy_pass=False),
                     },
-                    photo="https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/web_interface.png",
+                    photo="https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",
                 )
                 return
 
@@ -81,7 +80,7 @@ class RatkoWebMod(loader.Module):
                             },
                             {"text": self.strings("btn_no"), "action": "close"},
                         ],
-                        photo="https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/web_interface.png",
+                        photo="https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",
                     ):
                         raise Exception
                 except Exception:
@@ -117,7 +116,7 @@ class RatkoWebMod(loader.Module):
                     self.strings("opening_tunnel"),
                     reply_markup={"text": "🕔 Wait...", "data": "empty"},
                     photo=(
-                        "https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/opening_tunnel.png"
+                        "https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg"
                     ),
                 )
             else:
@@ -126,7 +125,7 @@ class RatkoWebMod(loader.Module):
                     message=message,
                     reply_markup={"text": "🕔 Wait...", "data": "empty"},
                     photo=(
-                        "https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/opening_tunnel.png"
+                        "https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg"
                     ),
                 )
 
@@ -135,7 +134,7 @@ class RatkoWebMod(loader.Module):
             await form.edit(
                 self.strings("tunnel_opened"),
                 reply_markup={"text": self.strings("web_btn"), "url": url},
-                photo="https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/tunnel_opened.png",
+                photo="https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",
             )
 
     @loader.command()
@@ -144,7 +143,6 @@ class RatkoWebMod(loader.Module):
         if "JAMHOST" in os.environ or "LAVHOST" in os.environ:
             await utils.answer(message, self.strings["host_denied"])
         else:
-
             id = utils.get_args(message)
             if not id:
                 reply = await message.get_reply_message()

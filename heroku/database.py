@@ -136,8 +136,8 @@ class Database(dict):
                 )
             except Exception as e:
                 logger.warning(
-                        f"Saved channel ID {existing_channel_id} not found or inaccessible: {e}"
-                    )
+                    f"Saved channel ID {existing_channel_id} not found or inaccessible: {e}"
+                )
                 content_channel = None
                 self.set("heroku.forums", "forums_cache", {"heroku-userbot": {}})
 
@@ -160,7 +160,7 @@ class Database(dict):
                 description="🪐 Content related to Heroku will be here",
                 silent=True,
                 invite_bot=True,
-                avatar="https://raw.githubusercontent.com/coddrago/assets/main/heroku/heroku.png",
+                avatar="https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",
                 forum=True,
                 hide_general=True,
                 _folder="heroku",

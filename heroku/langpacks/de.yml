@@ -369,7 +369,7 @@ inline_stuff:
   profile_cmd: "ℹ️ Grundlegende Userbot-Informationen\n\n<blockquote>• Präfix: {prefix}\n• RAM-Auslastung: {ram_usage} MB\n• CPU-Auslastung: {cpu_usage} %\n• Hosting: {host}</blockquote>"
   restart: "🔄 Dein ratko wird neu gestartet..."
   prefix_reset: "🔀 Präfix zurückgesetzt!"
-  _cmd_doc_ch_heroku_bot: "<Benutzername> - Ändert den Benutzernamen des Inline-Bots"
+  _cmd_doc_ch_ratko_bot: "<Benutzername> - Ändert den Benutzernamen des Inline-Bots"
 
 test:
   set_loglevel: "<tg-emoji emoji-id=5355133243773435190>🚫</tg-emoji> <b>Gib das Log-Level als Zahl oder String an</b>"
@@ -379,7 +379,7 @@ test:
   hint: "Geben Sie einen Hinweis an"
   ping_emoji: "Emoji, das bei einer leichten Ping-Erhöhung angezeigt wird."
   back: "↩️ Zurück"
-  banner_url: "Bild für Ihren Ping, zum Beispiel: https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/ping_cmd.png"
+  banner_url: "Bild für Ihren Ping, zum Beispiel: https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg"
   logs_caption: "<tg-emoji emoji-id=5350594756126721186>🪐</tg-emoji> <b>ratko-Logs des Levels</b> <code>{}</code>\n\n<tg-emoji emoji-id=5228879218363872764>⚪️</tg-emoji> <b>Version: {}.{}.{}</b>{}"
   debugging_enabled: "<tg-emoji emoji-id=5332533929020761310>✅</tg-emoji> <b>Der Entwicklermodus wurde für das Modul</b> <code>{0}</code> <b>aktiviert</b>\n<i>Gehe zum Ordner `debug_modules`, ändere die Datei `{0}.py` und beobachte die Änderungen in Echtzeit</i>"
   debugging_disabled: "<tg-emoji emoji-id=5332533929020761310>✅</tg-emoji> <b>Der Entwicklermodus wurde deaktiviert</b>"
@@ -675,4 +675,4 @@ $inline:
   command: "🪐 Befehl „{}“"
   button403: "Sie können diesen Button nicht drücken!"
   keep_id: "⚠️ Löschen Sie die ID nicht! {}"
-  no_query_results: "<tg-emoji emoji-id=5440660757194744323>‼️</tg-emoji> <b>Formular konnte nicht erstellt werden</b>\n\nMögliche Lösungen für den Fehler:\n\n1. Starten Sie ratko neu: <code>{prefix}restart</code>\n\n2. Aktivieren Sie den Inline-Modus für den Bot: gehen Sie zu @BotFather, senden Sie /mybots, klicken Sie auf Bot Settings -> Inline Mode -> On\n\n3. Erstellen Sie einen neuen Bot: senden Sie den Befehl <code>{prefix}ch_heroku_bot</code> <@botname>"
+  no_query_results: "<tg-emoji emoji-id=5440660757194744323>‼️</tg-emoji> <b>Formular konnte nicht erstellt werden</b>\n\nMögliche Lösungen für den Fehler:\n\n1. Starten Sie ratko neu: <code>{prefix}restart</code>\n\n2. Aktivieren Sie den Inline-Modus für den Bot: gehen Sie zu @BotFather, senden Sie /mybots, klicken Sie auf Bot Settings -> Inline Mode -> On\n\n3. Erstellen Sie einen neuen Bot: senden Sie den Befehl <code>{prefix}ch_ratko_bot</code> <@botname>"

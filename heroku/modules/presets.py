@@ -129,7 +129,7 @@ class Presets(loader.Module):
     async def _menu(self):
         await self.inline.bot.send_photo(
             self._client.tg_id,
-            "https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/presets_cmd.png",
+            "https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",
             caption=self.strings("welcome"),
             reply_markup=self.inline.generate_markup(self._markup_gen()),
         )
@@ -350,7 +350,7 @@ class Presets(loader.Module):
         """| Packs of modules to load"""
         await self.inline.form(
             message=message,
-            photo="https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/presets_cmd.png",
+            photo="https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",
             text=self.strings("welcome").replace(
                 "/presets", self.get_prefix() + "presets"
             ),
@@ -432,7 +432,9 @@ class Presets(loader.Module):
             return
         folder_name = args[0]
         module_name = args[1]
-        if folder_name in FOLDERS and module_name.lower() in [m.lower() for m in FOLDERS[folder_name]]:
+        if folder_name in FOLDERS and module_name.lower() in [
+            m.lower() for m in FOLDERS[folder_name]
+        ]:
             await message.edit(self.strings("already_in_folder").format(folder_name))
             return
         for mod in self.allmodules.modules:

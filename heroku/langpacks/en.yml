@@ -425,7 +425,7 @@ inline_stuff:
   profile_cmd: "ℹ️ Userbot Main Information\n\n<blockquote>• Prefix: {prefix}\n• RAM Usage: {ram_usage} MB\n• CPU Usage: {cpu_usage}%\n• Hosting: {host}</blockquote>"
   restart: "🔄 Your ratko is being restarted.."
   prefix_reset: "🔀 Prefix reset!"
-  _cmd_doc_ch_heroku_bot: "<username> - Change your ratko inline bot username"
+  _cmd_doc_ch_ratko_bot: "<username> - Change your ratko inline bot username"
   _cls_doc: "Provides support for inline stuff"
 
 test:
@@ -437,7 +437,7 @@ test:
   hint: "Set a hint"
   ping_emoji: "Emoji that appears when ping does not increase significantly"
   back: "↩️ Back"
-  banner_url: "Image for your ping, for example: https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/ping_cmd.png"
+  banner_url: "Image for your ping, for example: https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg"
   logs_caption: "<tg-emoji emoji-id=5350594756126721186>🪐</tg-emoji> <b>ratko logs with verbosity</b> <code>{}</code>\n\n<tg-emoji emoji-id=5228879218363872764>⚪️</tg-emoji> <b>Version: {}.{}.{}</b>{}"
   suspend_invalid_time: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Invalid time to suspend</b>"
   suspended: "<tg-emoji emoji-id=5452023368054216810>🥶</tg-emoji> <b>Bot  suspended for {}</b>"
@@ -745,4 +745,4 @@ $inline:
   command: "🪐 Command «{}»"
   button403: "You are not allowed to press this button!"
   keep_id: "⚠️ Do not remove ID! {}"
-  no_query_results: "<tg-emoji emoji-id=5440660757194744323>‼️</tg-emoji> <b>Failed to create form</b>\n\nPossible ways to fix the error:\n\n1. Restart ratko: <code>{prefix}restart</code>\n\n2. Enable inline mode for the bot: go to @BotFather, send /mybots, click Bot Settings -> Inline Mode -> On\n\n3. Create a new bot: send the command <code>{prefix}ch_heroku_bot</code> <@botname>"
+  no_query_results: "<tg-emoji emoji-id=5440660757194744323>‼️</tg-emoji> <b>Failed to create form</b>\n\nPossible ways to fix the error:\n\n1. Restart ratko: <code>{prefix}restart</code>\n\n2. Enable inline mode for the bot: go to @BotFather, send /mybots, click Bot Settings -> Inline Mode -> On\n\n3. Create a new bot: send the command <code>{prefix}ch_ratko_bot</code> <@botname>"

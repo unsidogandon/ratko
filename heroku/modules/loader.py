@@ -107,8 +107,10 @@ class LoaderMod(loader.Module):
     async def _async_init(self):
         modules = list(
             filter(
-                lambda x: not x.startswith(
-                    "https://raw.githubusercontent.com/coddrago/modules/main"
+                lambda x: (
+                    not x.startswith(
+                        "https://raw.githubusercontent.com/coddrago/modules/main"
+                    )
                 ),
                 utils.array_sum(
                     map(
@@ -292,7 +294,7 @@ class LoaderMod(loader.Module):
     ) -> dict:
         return {
             repo: {
-                f"Mod/{repo_id}/{i}": f'{repo.strip("/")}/{link}.py'
+                f"Mod/{repo_id}/{i}": f"{repo.strip('/')}/{link}.py"
                 for i, link in enumerate(set(await self._get_repo(repo)))
             }
             for repo_id, repo in enumerate(
@@ -380,7 +382,9 @@ class LoaderMod(loader.Module):
                 module_name = file_name.rsplit("/", maxsplit=1)[-1].rsplit(".", 1)[0]
 
         if not source:
-            source = (getattr(msg, "raw_text", None) or getattr(msg, "message", "") or "").strip()
+            source = (
+                getattr(msg, "raw_text", None) or getattr(msg, "message", "") or ""
+            ).strip()
 
         if not source:
             raise ValueError("Telegram message is empty")
@@ -389,7 +393,9 @@ class LoaderMod(loader.Module):
             module_name = (
                 next(
                     (
-                        line.split("class ", maxsplit=1)[1].split("(", maxsplit=1)[0].strip()
+                        line.split("class ", maxsplit=1)[1]
+                        .split("(", maxsplit=1)[0]
+                        .strip()
                         for line in source.splitlines()
                         if line.strip().startswith("class ")
                     ),
@@ -515,7 +521,7 @@ class LoaderMod(loader.Module):
                 "💫 <b>Joined <a"
                 f' href="https://t.me/{channel.username}">{utils.escape_html(channel.title)}</a></b>'
             ),
-            photo="https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/joined_jr.png",
+            photo="https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",
         )
 
     async def install_requirements(self, requirements: list):
@@ -828,7 +834,7 @@ class LoaderMod(loader.Module):
                         message,
                         self.strings("requirements_installing").format(
                             "\n".join(
-                                f"{self.config['command_emoji']}" f" {req}"
+                                f"{self.config['command_emoji']} {req}"
                                 for req in requirements
                             )
                         ),
@@ -1090,7 +1096,17 @@ class LoaderMod(loader.Module):
         )
 
         def loaded_msg(use_subscribe: bool = True):
-            nonlocal modname, version, mod_doc, modhelp, placeholders, developer, origin, subscribe, blob_link, depends_from
+            nonlocal \
+                modname, \
+                version, \
+                mod_doc, \
+                modhelp, \
+                placeholders, \
+                developer, \
+                origin, \
+                subscribe, \
+                blob_link, \
+                depends_from
             return self.strings("loaded").format(
                 modname.strip(),
                 version,
@@ -1540,7 +1556,7 @@ class LoaderMod(loader.Module):
             else (
                 f'📼 <b><a href="{link}">Link</a> for'
                 f" {utils.escape_html(class_name)}:</b>"
-                f' <code>{link}</code>\n\n{self.strings("not_exact") if not exact else ""}'
+                f" <code>{link}</code>\n\n{self.strings('not_exact') if not exact else ''}"
             )
         )
 
