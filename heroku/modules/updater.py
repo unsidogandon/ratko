@@ -197,7 +197,7 @@ class UpdaterMod(loader.Module):
             if manual_update:
                 m = await self.inline.bot.send_photo(
                     self.tg_id,
-                    "https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/updated.png",
+                    "https://raw.githubusercontent.com/unsidogandon/ratko/main/upd.jpg",
                     caption=self.strings("update_required").format(
                         utils.get_git_hash()[:6],
                         f'<a href="{REPO_URL}/compare/{{}}...{{}}">{{}}</a>'.format(
@@ -220,7 +220,7 @@ class UpdaterMod(loader.Module):
             else:
                 m = await self.inline.bot.send_photo(
                     self.tg_id,
-                    "https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/updated.png",
+                    "https://raw.githubusercontent.com/unsidogandon/ratko/main/upd.jpg",
                     caption=self.strings("autoupdate_notifier").format(
                         self.get_latest()[:6],
                         self.get_changelog(),
@@ -393,14 +393,17 @@ class UpdaterMod(loader.Module):
             if not old_commit or not new_commit or old_commit == new_commit:
                 return False
 
-            return "requirements.txt" in utils.run_git(
-                "diff",
-                "--name-only",
-                f"{old_commit}..{new_commit}",
-                "--",
-                "requirements.txt",
-                timeout=30,
-            ).splitlines()
+            return (
+                "requirements.txt"
+                in utils.run_git(
+                    "diff",
+                    "--name-only",
+                    f"{old_commit}..{new_commit}",
+                    "--",
+                    "requirements.txt",
+                    timeout=30,
+                ).splitlines()
+            )
         except subprocess.CalledProcessError:
             return False
 
@@ -571,7 +574,7 @@ class UpdaterMod(loader.Module):
         if not self.config["autoupdate"] and not self.get("autoupdate", False):
             await self.inline.bot.send_photo(
                 self.tg_id,
-                photo="https://raw.githubusercontent.com/coddrago/assets/refs/heads/main/heroku/unit_alpha.png",
+                photo="https://raw.githubusercontent.com/unsidogandon/ratko/main/upd.jpg",
                 caption=self.strings("autoupdate"),
                 reply_markup=self.inline.generate_markup(
                     [
@@ -614,7 +617,6 @@ class UpdaterMod(loader.Module):
         heroku_f = False
 
         if filters:
-
             for folder in filters:
                 title = getattr(folder, "title", None)
 
