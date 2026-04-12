@@ -11,7 +11,6 @@
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
 import contextlib
-import herokutl
 from herokutl.extensions.html import CUSTOM_EMOJIS
 from herokutl.tl.types import Message, User
 
@@ -91,7 +90,7 @@ class CoreMod(loader.Module):
         ua_doc="Інформація про ratko userbot",
         de_doc="Informationen über ratko userbot",
     )
-    async def herokucmd(self, message: Message):
+    async def ratkocmd(self, message: Message):
 
         branch_text = ""
         if version.branch == "master":
@@ -107,15 +106,14 @@ class CoreMod(loader.Module):
 
         await utils.answer(
             message,
-            self.strings("heroku").format(
+            self.strings("ratko").format(
                 (
                     utils.get_platform_emoji()
                     if self._client.heroku_me.premium and CUSTOM_EMOJIS
-                    else "🪐 <b>Heroku userbot</b>"
+                    else "🪐 <b>ratko userbot</b>"
                 ),
                 *version.__version__,
                 utils.get_commit_url(),
-                f"{herokutl.__version__} #{herokutl.tl.alltlobjects.LAYER}",
             )
             + (branch_text),
             file="https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",
