@@ -592,12 +592,14 @@ class Gallery(InlineUnit):
         """Calls and returnes caption for gallery"""
         caption = self._units[unit_id].get("caption", "")
         if isinstance(caption, ListGalleryHelper):
-            return caption.by_index(index)
+            return self.sanitise_text(caption.by_index(index))
 
-        return (
+        return self.sanitise_text(
             caption
             if isinstance(caption, str)
-            else caption() if callable(caption) else ""
+            else caption()
+            if callable(caption)
+            else ""
         )
 
     def _gallery_markup(self: "InlineManager", unit_id: str) -> InlineKeyboardMarkup:

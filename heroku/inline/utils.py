@@ -203,7 +203,9 @@ class Utils(InlineUnit):
 
                         case _ if "web_app" in button:
                             if isinstance(button["web_app"], str):
-                                btn_kwargs["web_app"] = WebAppInfo(url=button["web_app"])
+                                btn_kwargs["web_app"] = WebAppInfo(
+                                    url=button["web_app"]
+                                )
                             else:
                                 btn_kwargs["web_app"] = WebAppInfo(**button["web_app"])
 
@@ -324,7 +326,11 @@ class Utils(InlineUnit):
         return reply_markup
 
     def sanitise_text(self: "InlineManager", text: str) -> str:
-        return re.sub(r"</?emoji.*?>", "", text)
+        if not isinstance(text, str):
+            return text
+
+        text = utils.replace_tg_emoji_tags(text, self._client)
+        return re.sub(r"</?(?:tg-)?emoji.*?>", "", text)
 
     async def _edit_unit(
         self: "InlineManager",
@@ -457,7 +463,13 @@ class Utils(InlineUnit):
             else (
                 "photo"
                 if photo
-                else "audio" if audio else "video" if video else "gif" if gif else None
+                else "audio"
+                if audio
+                else "video"
+                if video
+                else "gif"
+                if gif
+                else None
             )
         )
 

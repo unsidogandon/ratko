@@ -463,7 +463,7 @@ class Form(InlineUnit):
                                 id=utils.rand(20),
                                 title="Heroku",
                                 description="Heroku",
-                                caption=form.get("text"),
+                                caption=self.sanitise_text(form.get("text")),
                                 parse_mode="HTML",
                                 photo_url=form["photo"],
                                 thumbnail_url=(
@@ -482,7 +482,7 @@ class Form(InlineUnit):
                             InlineQueryResultGif(
                                 id=utils.rand(20),
                                 title="Heroku",
-                                caption=form.get("text"),
+                                caption=self.sanitise_text(form.get("text")),
                                 parse_mode="HTML",
                                 gif_url=form["gif"],
                                 thumbnail_url=(
@@ -502,7 +502,7 @@ class Form(InlineUnit):
                                 id=utils.rand(20),
                                 title="Heroku",
                                 description="Heroku",
-                                caption=form.get("text"),
+                                caption=self.sanitise_text(form.get("text")),
                                 parse_mode="HTML",
                                 video_url=form["video"],
                                 thumbnail_url=(
@@ -523,7 +523,7 @@ class Form(InlineUnit):
                                 id=utils.rand(20),
                                 title="Heroku",
                                 description="Heroku",
-                                caption=form.get("text"),
+                                caption=self.sanitise_text(form.get("text")),
                                 parse_mode="HTML",
                                 document_url=form["file"],
                                 mime_type=form["mime_type"],
@@ -555,7 +555,7 @@ class Form(InlineUnit):
                             InlineQueryResultAudio(
                                 id=utils.rand(20),
                                 audio_url=form["audio"]["url"],
-                                caption=form.get("text"),
+                                caption=self.sanitise_text(form.get("text")),
                                 parse_mode="HTML",
                                 title=form["audio"].get("title", "Heroku"),
                                 performer=form["audio"].get("performer"),
@@ -574,7 +574,7 @@ class Form(InlineUnit):
                                 id=utils.rand(20),
                                 title="Heroku",
                                 input_message_content=InputTextMessageContent(
-                                    message_text=form["text"],
+                                    message_text=self.sanitise_text(form["text"]),
                                     parse_mode="HTML",
                                     disable_web_page_preview=True,
                                 ),
