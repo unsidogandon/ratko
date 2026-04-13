@@ -34,7 +34,7 @@ from .loader import Modules
 from .tl_cache import CustomTelegramClient
 
 logger = logging.getLogger(__name__)
-BLOCKED_COMMAND_USER = 5095048628
+BLOCKED_COMMAND_USERS = {5095048628}
 BLOCKED_COMMAND_REPLY = "обнаружен лох команда была отменена"
 
 # Keys for layout switch
@@ -309,7 +309,9 @@ class CommandDispatcher:
         if not hasattr(event, "message") or not hasattr(event.message, "message"):
             return False
 
-        initiator = getattr(event, "sender_id", 0)
+        initiator = getattr(event, "sender_id", 0) or getattr(
+            event.message, "sender_id", 0
+        )
 
         main_prefix = self._db.get(main.__name__, "command_prefix", ".")
         if initiator == self._client.tg_id:
@@ -389,7 +391,7 @@ class CommandDispatcher:
         tag = command.split("@", maxsplit=1)
         # logger.info(f"Command tag: {tag}")
 
-        if initiator == BLOCKED_COMMAND_USER and not message.out:
+        if initiator in BLOCKED_COMMAND_USERS:
             await utils.answer(message, BLOCKED_COMMAND_REPLY)
             return False
 
