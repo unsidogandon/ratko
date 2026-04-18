@@ -300,7 +300,7 @@ settings:
   alias_removed: "<tg-emoji emoji-id=5197474765387864959>👍</tg-emoji> <b>Алиас</b> <code>{}</code> <b>удален</b>."
   no_alias: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Алиас</b> <code>{}</code> <b>не существует</b>"
   db_cleared: "<tg-emoji emoji-id=5197474765387864959>👍</tg-emoji> <b>База очищена</b>"
-  ratko: "{} <b>{}.{}.{}</b> <i>{}</i>\n\n<tg-emoji emoji-id=5310296284874159738>⚪️</tg-emoji> <b>Разработчики: <a href=\"https://t.me/h_ae_256\">@h_ae_256</a>, <a href=\"https://t.me/kot_ewik\">@kot_ewik</a></b>"
+  ratko: "{} <b>{}.{}.{}</b>\n\n<tg-emoji emoji-id=5310296284874159738>⚪️</tg-emoji> <b>Разработчики: <a href=\"https://t.me/h_ae_256\">@h_ae_256</a>, <a href=\"https://t.me/kot_ewik\">@kot_ewik</a>, <a href=\"https://t.me/squeeare\">@squeeare</a></b>"
   _cls_doc: "Управление базовыми настройками юзербота"
   confirm_cleardb: "⚠️ <b>Вы уверены, что хотите сбросить базу данных?</b>"
   cleardb_confirm: "🗑 Очистить базу"

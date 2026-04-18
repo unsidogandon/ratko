@@ -353,7 +353,7 @@ settings:
   alias_removed: "<tg-emoji emoji-id=5197474765387864959>👍</tg-emoji> <b>Alias</b> <code>{}</code> <b>removed</b>."
   no_alias: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Alias</b> <code>{}</code> <b>does not exist</b>"
   db_cleared: "<tg-emoji emoji-id=5197474765387864959>👍</tg-emoji> <b>Database cleared</b>"
-  ratko: "{} <b>{}.{}.{}</b> <i>{}</i>\n\n<tg-emoji emoji-id=5310296284874159738>⚪️</tg-emoji> <b>Developers: <a href=\"https://t.me/h_ae_256\">@h_ae_256</a>, <a href=\"https://t.me/kot_ewik\">@kot_ewik</a></b>"
+  ratko: "{} <b>{}.{}.{}</b>\n\n<tg-emoji emoji-id=5310296284874159738>⚪️</tg-emoji> <b>Developers: <a href=\"https://t.me/h_ae_256\">@h_ae_256</a>, <a href=\"https://t.me/kot_ewik\">@kot_ewik</a>, <a href=\"https://t.me/squeeare\">@squeeare</a></b>"
   confirm_cleardb: "⚠️ <b>Are you sure, that you want to clear database?</b>"
   cleardb_confirm: "🗑 Clear database"
   cancel: "🚫 Cancel"

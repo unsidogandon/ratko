@@ -13,6 +13,8 @@
 import git
 import time
 import git
+import contextlib
+import random
 import psutil
 import os
 import glob
@@ -39,6 +41,12 @@ DEFAULT_INFO_BANNER = (
     "https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg"
 )
 OLD_INFO_BANNER = "https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg"
+CAT_BANNERS = [
+    "https://cataas.com/cat?width=900&height=700&fit=cover",
+    "https://cataas.com/cat/cute?width=900&height=700&fit=cover",
+    "https://cataas.com/cat/funny?width=900&height=700&fit=cover",
+    "https://cataas.com/cat/says/ratko?width=900&height=700&fit=cover&fontSize=28",
+]
 DEFAULT_INFO_MESSAGE = (
     "<blockquote>влд: {me}</blockquote>\n"
     "про ратко\n"
@@ -95,6 +103,12 @@ class RatkoInfoMod(loader.Module):
                 validator=loader.validators.RandomLink(),
             ),
             loader.ConfigValue(
+                "random_cats",
+                False,
+                "Show random cat images in .info",
+                validator=loader.validators.Boolean(),
+            ),
+            loader.ConfigValue(
                 "ping_emoji",
                 "🪐",
                 lambda: self.strings["ping_emoji"],
@@ -132,6 +146,16 @@ class RatkoInfoMod(loader.Module):
             return DEFAULT_INFO_MESSAGE
 
         return custom_message
+
+    def _get_effective_banner(self) -> tuple[str | None, bool]:
+        if self.config.get("random_cats"):
+            return f"{random.choice(CAT_BANNERS)}&t={time.time_ns()}", True
+
+        banner_url = self.config["banner_url"] or DEFAULT_INFO_BANNER
+        if banner_url == OLD_INFO_BANNER:
+            banner_url = DEFAULT_INFO_BANNER
+
+        return banner_url, False
 
     async def _render_info(self, start: float) -> str:
         try:
@@ -215,13 +239,40 @@ class RatkoInfoMod(loader.Module):
     @loader.command()
     async def infocmd(self, message: Message):
         start = time.perf_counter_ns()
-        banner_url = self.config["banner_url"] or DEFAULT_INFO_BANNER
-        if banner_url == OLD_INFO_BANNER:
-            banner_url = DEFAULT_INFO_BANNER
+        banner_url, force_web_media = self._get_effective_banner()
+
+        rendered = await self._render_info(start)
+
+        if force_web_media and banner_url:
+            try:
+                response = await utils.run_sync(
+                    requests.get,
+                    banner_url,
+                    timeout=20,
+                )
+                response.raise_for_status()
+
+                photo = BytesIO(response.content)
+                photo.name = "cat.jpg"
+
+                await message.client.send_file(
+                    message.to_id,
+                    photo,
+                    caption=rendered,
+                    reply_to=getattr(message, "reply_to_msg_id", None),
+                    force_document=False,
+                    parse_mode="html",
+                )
+                with contextlib.suppress(Exception):
+                    if getattr(message, "out", False):
+                        await message.delete()
+                return
+            except Exception:
+                logger.exception("Failed to send cat photo, falling back to plain info")
 
         media = str(banner_url)
 
-        if banner_url and self.config["quote_media"] is True:
+        if banner_url and (self.config["quote_media"] is True or force_web_media):
             media = InputMediaWebPage(str(banner_url), optional=True)
 
         elif not banner_url:
@@ -232,7 +283,7 @@ class RatkoInfoMod(loader.Module):
                 case _ if self._get_effective_info_template() == DEFAULT_INFO_MESSAGE:
                     await utils.answer(
                         message,
-                        await self._render_info(start),
+                        rendered,
                         file=media,
                         reply_to=getattr(message, "reply_to_msg_id", None),
                         invert_media=self.config["invert_media"],
@@ -242,7 +293,7 @@ class RatkoInfoMod(loader.Module):
                         message = await utils.answer(message, self.config["ping_emoji"])
                     await utils.answer(
                         message,
-                        await self._render_info(start),
+                        rendered,
                         file=media,
                         reply_to=getattr(message, "reply_to_msg_id", None),
                         invert_media=self.config["invert_media"],

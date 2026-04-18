@@ -92,19 +92,6 @@ class CoreMod(loader.Module):
         de_doc="Informationen über ratko userbot",
     )
     async def ratkocmd(self, message: Message):
-
-        branch_text = ""
-        if version.branch == "master":
-            branch_text = ""
-        elif version.branch == "beta" or self.tg_id in [
-            1714120111,
-            1226061708,
-            5717135725,
-        ]:
-            branch_text = self.strings["happy_beta"].format(version.branch)
-        else:
-            branch_text = self.strings("unstable").format(version.branch)
-
         await utils.answer(
             message,
             self.strings("ratko").format(
@@ -114,9 +101,7 @@ class CoreMod(loader.Module):
                     else "☃️ <b>ratko userbot</b>"
                 ),
                 *version.__version__,
-                utils.get_commit_url(),
-            )
-            + (branch_text),
+            ),
             file="https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",
             reply_to=getattr(message, "reply_to_msg_id", None),
         )

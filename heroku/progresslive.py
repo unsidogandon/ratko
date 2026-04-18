@@ -38,6 +38,8 @@ class StartupLiveDisplay:
         self._spinner_index = 0
         self._spinner = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
         self._hint = "логи сохраняються в ratko.log в корне ратко юзербот"
+        self._last_row = None
+        self._occupied_rows = set()
 
     def _term_size(self):
         return shutil.get_terminal_size((100, 24))
@@ -64,9 +66,25 @@ class StartupLiveDisplay:
         if not self.enabled:
             return
         rows = max(self._term_size().lines, 2)
-        sys.stdout.write(f"\0337\033[{rows};1H\033[2K{self._fit(line)}\0338")
+
+        clear_rows = set(self._occupied_rows)
+        clear_rows.add(rows)
+
+        if self._last_row is not None:
+            clear_rows.update({self._last_row - 1, self._last_row, self._last_row + 1})
+
+        clear_rows.update({rows - 1, rows, rows + 1})
+
+        commands = ["\0337"]
+        for row in sorted(r for r in clear_rows if r >= 1):
+            commands.append(f"\033[{row};1H\033[2K")
+
+        commands.append(f"\033[{rows};1H{self._fit(line)}\0338")
+        sys.stdout.write("".join(commands))
         sys.stdout.flush()
         self._rendered = True
+        self._last_row = rows
+        self._occupied_rows = {rows}
 
     def _with_hint(self, text: str) -> str:
         width = max(self._term_size().columns - 1, 20)
@@ -177,7 +195,19 @@ class StartupLiveDisplay:
             self._stdin_attrs = None
         if self.enabled and self._rendered:
             rows = max(self._term_size().lines, 2)
-            sys.stdout.write(f"\0337\033[{rows};1H\033[2K\0338")
+
+            clear_rows = set(self._occupied_rows)
+            clear_rows.add(rows)
+            if self._last_row is not None:
+                clear_rows.update({self._last_row - 1, self._last_row, self._last_row + 1})
+            clear_rows.update({rows - 1, rows, rows + 1})
+
+            commands = ["\0337"]
+            for row in sorted(r for r in clear_rows if r >= 1):
+                commands.append(f"\033[{row};1H\033[2K")
+            commands.append("\0338")
+
+            sys.stdout.write("".join(commands))
             sys.stdout.flush()
 
     def set_module_total(self, count: int):
