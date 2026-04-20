@@ -103,7 +103,7 @@ def build_startup_logo(build: str, version: str, update: str) -> str:
     enabled = _supports_truecolor()
     info = [
         f"Version : {version} | coden: ELDA",
-        f"made by @h_ae_256, @kot_ewik, @squeeare (пидр) ",
+        "made by @h_ae_256, @kot_ewik, @squeeare (пидр) ",
     ]
     return (
         "\n"

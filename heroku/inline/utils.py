@@ -839,7 +839,7 @@ class Utils(InlineUnit):
         base_url = url.split("?")[0]
 
         async with session.post(
-            base_url + f"/api?hash=-",
+            base_url + "/api?hash=-",
             headers=headers,
             data={"_auth": params, "method": "auth"},
         ) as resp:
@@ -891,7 +891,7 @@ class Utils(InlineUnit):
             await asyncio.sleep(1.5)
             try:
                 result = await self._get_webapp_session(url)
-            except:
+            except Exception:
                 continue
             break
         else:

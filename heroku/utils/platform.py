@@ -76,10 +76,10 @@ def get_named_platform_emoji() -> str:
             with open("/proc/device-tree/model") as f:
                 model = f.read()
                 if "Orange" in model:
-                    return f"🍊 "
+                    return "🍊 "
 
                 if "Raspberry" in model:
-                    return f"🍇 "
+                    return "🍇 "
                 else:
                     return "?"
 
@@ -99,7 +99,7 @@ def get_named_platform_emoji() -> str:
         case _ if IS_DOCKER:
             return "🐳 "
         case _ if IS_LAVHOST:
-            return f"✌️ "
+            return "✌️ "
         case _:
             return "💎 "
 

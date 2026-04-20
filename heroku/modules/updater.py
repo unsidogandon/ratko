@@ -210,7 +210,7 @@ class UpdaterMod(loader.Module):
                     else:
                         logger.info("Got a major update, updating manually")
                         manual_update = True
-                except:
+                except Exception:
                     manual_update = True
 
             if manual_update:
@@ -607,7 +607,7 @@ class UpdaterMod(loader.Module):
                     [
                         [
                             {
-                                "text": f"✅ Turn on",
+                                "text": "✅ Turn on",
                                 "callback": self._set_autoupdate_state,
                                 "args": (True,),
                                 "style": "success",

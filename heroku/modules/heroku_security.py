@@ -669,7 +669,7 @@ class RatkoSecurityMod(loader.Module):
             await utils.answer(message, self.strings("no_owner"))
             return
 
-        prefixes = self._db.get(main.__name__, f"command_prefixes", {})
+        prefixes = self._db.get(main.__name__, "command_prefixes", {})
         for user in _resolved_users:
             _and_prefixes += [prefixes.get(str(user.id), None)]
 

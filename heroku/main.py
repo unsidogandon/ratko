@@ -566,7 +566,7 @@ class Heroku:
                 session_id = session_name.split("-", maxsplit=1)[-1]
                 existing = sessions_map.get(session_id)
                 # Prefer new ratko sessions over old heroku ones for the same account.
-                if existing and existing.filename.startswith(str(BASE_PATH / f"ratko-")):
+                if existing and existing.filename.startswith(str(BASE_PATH / "ratko-")):
                     continue
 
                 if session_name.startswith("ratko-") or existing is None:
@@ -951,7 +951,7 @@ class Heroku:
             await asyncio.sleep(1.5)
             try:
                 result = await inutils._get_webapp_session(url)
-            except:
+            except Exception:
                 continue
             break
         else:
@@ -966,7 +966,7 @@ class Heroku:
 
         try:
             await client.get_entity(f"{username}")
-        except:
+        except Exception:
             return True
 
     async def _initial_setup(self) -> bool:
@@ -1506,7 +1506,7 @@ class Heroku:
                 try:
                     await inline._dp.stop_polling()
                     await inline.bot.session.close()
-                except:
+                except Exception:
                     pass
         for c in self.clients:
             await c.disconnect()
@@ -1543,7 +1543,7 @@ class Heroku:
             logging.info("Bye!")
             try:
                 self.loop.run_until_complete(self._shutdown_handler())
-            except:
+            except Exception:
                 pass
 
 

@@ -151,7 +151,7 @@ class Web:
             await asyncio.sleep(1.5)
             try:
                 result = await inutils._get_webapp_session(url)
-            except:
+            except Exception:
                 continue
             break
         else:

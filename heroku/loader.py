@@ -1343,7 +1343,7 @@ class Modules:
         default = "."
 
         if ent_id:
-            prefixes = self._db.get(key, f"command_prefixes", {})
+            prefixes = self._db.get(key, "command_prefixes", {})
             result = prefixes.get(str(ent_id), default)
         else:
             result = self._db.get(key, "command_prefix", default)
@@ -1357,7 +1357,7 @@ class Modules:
         default = "."
 
         prefixes = ()
-        prefixes += tuple(self._db.get(key, f"command_prefixes", {}).values())
+        prefixes += tuple(self._db.get(key, "command_prefixes", {}).values())
         prefixes += tuple(self._db.get(key, "command_prefix", default))
 
         return set(prefixes)
