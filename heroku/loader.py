@@ -1453,7 +1453,12 @@ class Modules:
                     )
 
                 logger.debug("Removing module %s for update", module)
-                await module.on_unload()
+                try:
+                    res = module.on_unload()
+                    if inspect.isawaitable(res):
+                        await res
+                except Exception:
+                    logger.exception("Error unloading module %s", module)
 
                 self.modules.remove(module)
                 for _, method in utils.iter_attrs(module):
@@ -1758,7 +1763,12 @@ class Modules:
                 logger.debug("Removing module %s for unload", module)
                 self.modules.remove(module)
 
-                await module.on_unload()
+                try:
+                    res = module.on_unload()
+                    if inspect.isawaitable(res):
+                        await res
+                except Exception:
+                    logger.exception("Error unloading module %s", module)
 
                 self.unregister_raw_handlers(module, "unload")
                 self.unregister_loops(module, "unload")
