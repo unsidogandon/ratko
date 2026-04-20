@@ -13,7 +13,7 @@
 import asyncio
 import logging
 
-from deep_translator import GoogleTranslator
+from deep_translator import GoogleTranslator, MyMemoryTranslator
 from herokutl.tl.custom import Message
 
 from .. import loader, utils

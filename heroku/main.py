@@ -15,6 +15,7 @@
 import argparse
 import asyncio
 import collections
+import contextlib
 import importlib
 import json
 import logging
@@ -50,8 +51,9 @@ from herokutl.tl.functions.updates import GetStateRequest
 from herokutl.sessions import MemorySession, SQLiteSession
 from herokutl.tl.functions.account import GetPasswordRequest
 from herokutl.tl.functions.auth import CheckPasswordRequest
+from herokutl.tl.functions.contacts import UnblockRequest
 
-from . import database, loader, utils
+from . import database, loader, utils, version
 from ._internal import print_banner, restart
 from .dispatcher import CommandDispatcher
 from .inline.token_obtainment import TokenObtainment

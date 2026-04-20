@@ -22,7 +22,9 @@ import time
 import typing
 
 import aiohttp
-from git import GitCommandError
+import git
+from git import GitCommandError, Repo
+from herokutl.extensions.html import CUSTOM_EMOJIS
 from herokutl.tl.functions.messages import (
     GetDialogFiltersRequest,
     UpdateDialogFilterRequest,

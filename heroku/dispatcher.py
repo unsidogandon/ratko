@@ -23,6 +23,7 @@ import sys
 import traceback
 import typing
 
+import requests
 from herokutl import events
 from herokutl.errors import FloodWaitError, RPCError
 from herokutl.tl.types import Message

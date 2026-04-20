@@ -14,6 +14,7 @@
 
 import asyncio
 import contextlib
+import git
 import inspect
 import io
 import linecache
@@ -22,6 +23,7 @@ import re
 import sys
 import traceback
 import typing
+import os
 import functools
 from logging.handlers import RotatingFileHandler
 from collections.abc import Coroutine
@@ -32,6 +34,13 @@ from herokutl.errors import PersistentTimestampOutdatedError
 from herokutl.errors.rpcbaseerrors import ServerError, RPCError
 
 from . import utils
+from ._internal import (
+    get_branch_name,
+    check_commit_ancestor,
+    reset_to_master,
+    restore_worktree,
+    restart,
+)
 from .tl_cache import CustomTelegramClient
 from .types import BotInlineCall, Module, CoreOverwriteError
 

@@ -11,11 +11,18 @@
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
 import logging
+import random
 
+import herokutl
+from herokutl.tl.functions.messages import (
+    GetDialogFiltersRequest,
+    UpdateDialogFilterRequest,
+)
 from herokutl.tl.types import Message
 from herokutl.utils import get_display_name
 
-from .. import loader, main, utils
+from .. import loader, log, main, utils
+from .._internal import fw_protect, restart
 from ..inline.types import InlineCall
 
 logger = logging.getLogger(__name__)
