@@ -403,12 +403,12 @@ async def answer(
         if len(text) >= 4096 and not hasattr(message, "heroku_grepped"):
             try:
                 if not message.client.loader.inline.init_complete:
-                    raise
+                    raise ValueError("Inline not init")
 
                 strings = list(smart_split(text, entities, 4096))
 
                 if len(strings) > 10:
-                    raise
+                    raise ValueError("Too many strings")
 
                 list_ = await message.client.loader.inline.list(
                     message=message,
@@ -416,7 +416,7 @@ async def answer(
                 )
 
                 if not list_:
-                    raise
+                    raise ValueError("List creation failed")
 
                 return list_
             except Exception:
