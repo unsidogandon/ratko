@@ -1014,7 +1014,7 @@ class RatkoConfigMod(loader.Module):
                     folders[folder_name] = {}
                 folders[folder_name][mod_name] = [p for p in mod.config]
         try:
-            from . import presets as _presets_mod
+            pass
 
             preset_folders = self.db.get("presets", "folders")
         except Exception:

@@ -17,7 +17,6 @@ import time
 import typing
 
 from herokutl import TelegramClient
-from herokutl import __name__ as __base_name__
 from herokutl import helpers
 from herokutl._updates import ChannelState, Entity, EntityType, SessionState
 from herokutl.errors.rpcerrorlist import TopicDeletedError

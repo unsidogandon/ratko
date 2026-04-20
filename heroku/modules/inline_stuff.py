@@ -15,8 +15,6 @@ import re
 import string
 import asyncio
 
-from herokutl.errors.rpcerrorlist import YouBlockedUserError
-from herokutl.tl.functions.contacts import UnblockRequest
 from herokutl.tl.types import Message
 
 from .. import loader, utils
