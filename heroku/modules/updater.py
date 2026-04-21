@@ -404,10 +404,9 @@ class UpdaterMod(loader.Module):
             old_commit = utils.get_git_hash()
             utils.run_git("fetch", "origin", version.branch, check=True, timeout=120)
             utils.run_git(
-                "pull",
-                "--ff-only",
-                "origin",
-                version.branch,
+                "reset",
+                "--hard",
+                f"origin/{version.branch}",
                 check=True,
                 timeout=120,
             )
