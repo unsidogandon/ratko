@@ -79,11 +79,8 @@ class InlineStuff(loader.Module):
         args = utils.get_args_raw(message).strip("@")
 
         if not args:
-            from .. import main
-
-            uid = utils.rand(7)
-            genran = "".join(random.choice(main.LATIN_MOCK))
-            args = f"{genran}_{uid}_bot"
+            await utils.answer(message, self.strings("bot_username_invalid"))
+            return
 
         if (
             not args.lower().endswith("bot")
@@ -108,7 +105,9 @@ class InlineStuff(loader.Module):
         self._db.set("heroku.inline", "custom_bot", args)
         self._db.set("heroku.inline", "bot_token", None)
         self._reinit_inline()
-        await utils.answer(message, self.strings("bot_updated"))
+        
+        reply_text = self.strings("bot_updated") + f"\n\n<b>Новый юзернейм:</b> @{args}"
+        await utils.answer(message, reply_text)
 
     @loader.command()
     async def ch_bot_token(self, message: Message):

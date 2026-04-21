@@ -700,11 +700,14 @@ class Heroku:
             and getattr(self.arguments, "tty", False)
             and not existing
         ):
-            while bot := input(
-                "You can enter a custom bot username or leave it empty and Ratko will generate a random one: "
-            ):
-                bot = bot.strip()
-                bot = bot.lstrip("@")
+            while True:
+                bot = input(
+                    "You must enter a custom inline bot username (e.g. my_cool_bot): "
+                )
+                bot = bot.strip().lstrip("@")
+                if not bot:
+                    print("Username cannot be empty.")
+                    continue
                 if any(
                     ch not in (string.ascii_letters + string.digits + "_") for ch in bot
                 ):
@@ -721,7 +724,7 @@ class Heroku:
                         print("Bot username saved!")
                         break
                     else:
-                        print("Bot username is occupied. Try again or leave it empty")
+                        print("Bot username is occupied. Try again.")
                         continue
                 except Exception:
                     print("Something went wrong")
@@ -906,11 +909,18 @@ class Heroku:
         self._show_registration_step(
             "Inline Bot",
             [
-                "Enter a custom bot username if you want one",
-                "Or leave it empty and Ratko will generate it automatically",
+                "Enter a custom inline bot username",
             ],
         )
-        while bot := self._prompt_input("Custom bot username (optional): "):
+        while True:
+            bot = self._prompt_input("Custom bot username: ")
+            bot = bot.strip().lstrip("@")
+            if not bot:
+                print(self._reg_color("Username cannot be empty.", "91"))
+                continue
+            if any(ch not in (string.ascii_letters + string.digits + "_") for ch in bot) or not bot.lower().endswith("bot"):
+                print(self._reg_color("Invalid username: must end with 'bot' and contain only ASCII letters, digits, and underscores.", "91"))
+                continue
             try:
                 if await self._check_bot(client, bot):
                     db.set("heroku.inline", "custom_bot", bot)
@@ -919,7 +929,7 @@ class Heroku:
                 else:
                     print(
                         self._reg_color(
-                            "Bot username is occupied. Try again or leave it empty",
+                            "Bot username is occupied. Try again.",
                             "93",
                         )
                     )

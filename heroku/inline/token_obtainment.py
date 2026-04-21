@@ -143,21 +143,6 @@ class TokenObtainment(InlineUnit):
 
         if self._db.get("heroku.inline", "custom_bot", False):
             username = self._db.get("heroku.inline", "custom_bot").strip("@")
-            username = f"@{username}"
-            try:
-                await self._client.get_entity(username)
-            except ValueError:
-                pass
-            else:
-                uid = utils.rand(6)
-                genran = "".join(random.choice(main.LATIN_MOCK))
-                username = f"@{genran}_{uid}_bot"
-        else:
-            uid = utils.rand(6)
-            genran = "".join(random.choice(main.LATIN_MOCK))
-            username = f"@{genran}_{uid}_bot"
-
-        for _ in range(5):
             data = {"username": username, "method": "checkBotUsername"}
             await fw_protect()
 
@@ -169,16 +154,11 @@ class TokenObtainment(InlineUnit):
                     return False
 
                 content = await resp.json()
-            result = content.get("ok", False)
-
-            if result:
-                break
-
-            uid = utils.rand(6)
-            genran = "".join(random.choice(main.LATIN_MOCK))
-            username = f"@{genran}_{uid}_bot"
+            if not content.get("ok", False):
+                logger.error(f"Username @{username} is not available in BotFather")
+                return False
         else:
-            logger.error("You've got reached limit of tries while checking username")
+            logger.error("No custom bot username specified in database. Inline bot creation failed. Please set a bot username using .ch_ratko_bot <username>")
             return False
 
         try:
