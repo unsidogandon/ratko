@@ -456,7 +456,7 @@ async def wait_for_content_channel(db: "Database", delay: float = 10) -> int:
 
     while not cid:
         logger.warning(
-            "Heroku content channel not found in database. Sleeping 10 seconds..."
+            "ratko content channel not found in database. Sleeping 10 seconds..."
         )
         await asyncio.sleep(delay)
         cid = db.get("heroku.forums", "channel_id", None)
