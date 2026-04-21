@@ -154,7 +154,7 @@ sudo apt update && sudo apt upgrade -y && sudo apt install python3 git python3-p
   
  1. Перейдите в [@hikkahost_bot](https://.me/hikkahost_bot)
 2. Нажмите "Установить"
-3. Выберите "🪐 Ratko"
+3. Выберите "☃️ Ratko"
 И продолжайте установку.
 
 > **После этого вы получите ссылку, откройте ее и войдите в свою учетную запись.**
@@ -178,7 +178,7 @@ sudo apt update && sudo apt upgrade -y && sudo apt install python3 git python3-p
     
 1. Перейдите в [@jamhostbot](https://t.me/jamhostbot) и напишите команду `/pay`
 2. Оплатите подписку на сайте
-3. После оплаты напишите команду <code>/install</code> боту, выберите " <b>🪐 Ratko</b> " в списке юзерботов и выберите нужный сервер
+3. После оплаты напишите команду <code>/install</code> боту, выберите " <b>☃️ Ratko</b> " в списке юзерботов и выберите нужный сервер
 4. Войдите, используя ссылку, предоставленную ботом
 
 </details>

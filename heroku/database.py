@@ -157,7 +157,7 @@ class Database(dict):
             content_channel, _ = await utils.asset_channel(
                 client=self._client,
                 title="heroku-userbot",
-                description="🪐 Content related to Heroku will be here",
+                description="☃️ Content related to Heroku will be here",
                 silent=True,
                 invite_bot=True,
                 avatar="https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",

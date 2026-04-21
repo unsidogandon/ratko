@@ -157,7 +157,7 @@ python3 -m heroku
   
   1. Go to [@hikkahost_bot](https://.me/hikkahost_bot)
   2. Press "Install"
-  3. Choose "🪐 Ratko"
+  3. Choose "☃️ Ratko"
   And continue installation.
   > **After that, you will receive a link, open it and login in your account.**
 
@@ -180,7 +180,7 @@ To install, just go to [@lavhostbot](https://t.me/lavhostbot) and follow these s
     
   1. Go to [@jamhostbot](https://t.me/jamhostbot) and write the command <code>/pay</code>
   2. Pay for the subscription on the website
-  3. After payment, write the command <code>/install</code> to the bot, select " <b>🪐 Ratko</b> " in the list of userbots and select the desired server
+  3. After payment, write the command <code>/install</code> to the bot, select " <b>☃️ Ratko</b> " in the list of userbots and select the desired server
   4. Log in using the link provided by the bot
 </details>
 You will have to download https://raw.githubusercontent.com/unsidogandon/ratko/refs/heads/main/SwitchToRatko.py

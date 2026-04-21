@@ -51,7 +51,7 @@ class InlineStuff(loader.Module):
 
         await message.delete()
 
-        m = await message.respond("🪐", reply_to=utils.get_topic(message))
+        m = await message.respond("☃️", reply_to=utils.get_topic(message))
 
         await self.inline.gallery(
             message=m,
@@ -126,7 +126,7 @@ class InlineStuff(loader.Module):
                         (
                             "<tg-emoji emoji-id=5463379725441341739>🪐</tg-emoji>"
                             if self._client.heroku_me.premium
-                            else "🪐"
+                            else "☃️"
                         ),
                         utils.get_platform_emoji() if self._client else "Ratko",
                     ),

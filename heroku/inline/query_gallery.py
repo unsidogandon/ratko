@@ -146,7 +146,7 @@ class QueryGallery(InlineUnit):
                     title=i["title"],
                     description=i["description"],
                     input_message_content=InputTextMessageContent(
-                        message_text=f"🪐 <b>Opening gallery...</b>\n<i>#id: {id_}</i>",
+                        message_text=f"☃️ <b>Opening gallery...</b>\n<i>#id: {id_}</i>",
                         parse_mode="HTML",
                         disable_web_page_preview=True,
                     ),

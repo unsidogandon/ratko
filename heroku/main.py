@@ -1255,7 +1255,7 @@ class Heroku:
                 if self.web and hasattr(self.web, "url"):
                     web_url = f"🔗 Web url: {self.web.url}"
                     logging.debug(
-                        "\n🪐 ratko %s #%s (%s) started\n%s",
+                        "\n☃️ ratko %s #%s (%s) started\n%s",
                         ".".join(list(map(str, list(__version__)))),
                         build[:7],
                         upd,
@@ -1283,7 +1283,7 @@ class Heroku:
                         (
                             utils.get_platform_emoji()
                             if client.heroku_me.premium is True
-                            else "🪐 ratko"
+                            else "☃️ ratko"
                         ),
                         ".".join(list(map(str, list(__version__)))),
                         build,
