@@ -48,16 +48,16 @@ class TokenObtainment(InlineUnit):
         if username:
             username = username.strip("@")
             match = re.search(
-                rf'href="/botfather/bot/(\d+)".*?@{re.escape(username)}(?:<|\s)',
+                rf'href="/botfather/bot/(\d+)"(?:(?!href="/botfather/bot/).)*?@{re.escape(username)}(?:<|\s)',
                 content,
-                flags=re.DOTALL,
+                flags=re.DOTALL | re.IGNORECASE,
             )
             return match.group(1) if match else None
 
         match = re.search(
-            r'href="/botfather/bot/(\d+)".*?@(\w+_[0-9A-Za-z]{6}_bot)(?:<|\s)',
+            r'href="/botfather/bot/(\d+)"(?:(?!href="/botfather/bot/).)*?@(\w+_[0-9A-Za-z]{6}_bot)(?:<|\s)',
             content,
-            flags=re.DOTALL,
+            flags=re.DOTALL | re.IGNORECASE,
         )
         return match.group(1) if match else None
 

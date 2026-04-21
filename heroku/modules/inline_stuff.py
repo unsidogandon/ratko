@@ -104,10 +104,8 @@ class InlineStuff(loader.Module):
 
         self._db.set("heroku.inline", "custom_bot", args)
         self._db.set("heroku.inline", "bot_token", None)
-        self._reinit_inline()
         
-        reply_text = self.strings("bot_updated") + f"\n\n<b>Новый юзернейм:</b> @{args}"
-        await utils.answer(message, reply_text)
+        await utils.answer(message, self.strings("bot_updated"))
 
     @loader.command()
     async def ch_bot_token(self, message: Message):
