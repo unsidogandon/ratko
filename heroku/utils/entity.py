@@ -327,9 +327,7 @@ async def asset_channel(
             peer.id == getattr(folder_peer, "channel_id", None)
             for folder_peer in folder.include_peers
         ):
-            print(len(folder.include_peers))
             folder.include_peers.append(await client.get_input_entity(peer))
-            print(len(folder.include_peers))
 
             await client(
                 UpdateDialogFilterRequest(
@@ -449,7 +447,7 @@ async def wait_for_content_channel(db: "Database", delay: float = 10) -> int:
 
     while not cid:
         logger.warning(
-            "Heroku content channel not found in database. Sleeping 10 seconds..."
+            "Ratko content channel not found in database. Sleeping 10 seconds..."
         )
         await asyncio.sleep(delay)
         cid = db.get("heroku.forums", "channel_id", None)
@@ -466,7 +464,10 @@ async def get_topic_id(db: "Database", topic_name: str) -> int | None:
     """
     try:
         forums_cache = db.get("heroku.forums", "forums_cache", {})
-        return forums_cache.get("heroku-userbot", {}).get(topic_name)
+        return (
+            forums_cache.get("ratko-userbot", {}).get(topic_name)
+            or forums_cache.get("heroku-userbot", {}).get(topic_name)
+        )
     except Exception:
         return None
 

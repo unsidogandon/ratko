@@ -315,7 +315,13 @@ class Utils(InlineUnit):
         return reply_markup
 
     def sanitise_text(self: "InlineManager", text: str) -> str:
-        return re.sub(r"</?emoji.*?>", "", text)
+        if not isinstance(text, str):
+            return text
+
+        text = utils.replace_tg_emoji_tags(text, self._client)
+        if getattr(getattr(self._client, "heroku_me", None), "premium", False):
+            return re.sub(r"</?emoji.*?>", "", text)
+        return re.sub(r"</?(?:tg-)?emoji.*?>", "", text)
 
     async def _edit_unit(
         self: "InlineManager",

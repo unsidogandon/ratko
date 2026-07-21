@@ -13,8 +13,9 @@ from herokutl.tl import TLObject
 
 
 class TelethonBot:
-    def __init__(self, client):
+    def __init__(self, client, emoji_client=None):
         self.client = client
+        self._emoji_client = emoji_client or client
 
     async def __call__(self, value):
         if isinstance(value, TLObject):
@@ -25,6 +26,13 @@ class TelethonBot:
 
     def __getattr__(self, item: str):
         return getattr(self.client, item)
+
+    def _emoji_text(self, text):
+        if not isinstance(text, str):
+            return text
+        from .. import utils
+
+        return utils.replace_tg_emoji_tags(text, self._emoji_client)
 
     @staticmethod
     def _normalise_file(file):
@@ -162,7 +170,7 @@ class TelethonBot:
         return self._with_message_id_alias(
             await self.client.send_message(
                 chat_id,
-                text,
+                self._emoji_text(text),
                 parse_mode="HTML",
                 buttons=reply_markup,
                 silent=(
@@ -189,7 +197,7 @@ class TelethonBot:
             await self.client.send_file(
                 chat_id,
                 self._normalise_file(document),
-                caption=caption,
+                caption=self._emoji_text(caption),
                 parse_mode="HTML",
                 force_document=True,
                 buttons=reply_markup,
@@ -212,13 +220,19 @@ class TelethonBot:
             await self.client.send_file(
                 chat_id,
                 self._normalise_file(photo),
-                caption=caption,
+                caption=self._emoji_text(caption),
                 parse_mode="HTML",
                 buttons=reply_markup,
                 silent=kwargs.get("disable_notification"),
                 **self._thread_kwargs(message_thread_id),
             )
         )
+
+    async def send_file(self, *args, **kwargs):
+        kwargs = dict(kwargs)
+        if "caption" in kwargs:
+            kwargs["caption"] = self._emoji_text(kwargs["caption"])
+        return await self.client.send_file(*args, **kwargs)
 
     async def send_audio(
         self,
@@ -325,6 +339,7 @@ class TelethonBot:
         **kwargs: typing.Any,
     ) -> typing.Any:
         markup = self._build_reply_markup(reply_markup)
+        text = self._emoji_text(text)
 
         if inline_message_id is not None:
             inline_id = self._coerce_inline_message_id(inline_message_id)

@@ -220,7 +220,7 @@ class TokenObtainment(InlineUnit):
                     for msg in [
                         "/setinline",
                         button.text,
-                        "user@heroku:~$",
+                        "user@ratko:~$",
                         "/setinlinefeedback",
                         button.text,
                         "Enabled",
@@ -274,8 +274,9 @@ class TokenObtainment(InlineUnit):
             await self.register_manager(ignore_token_checks=True)
 
     async def _dp_revoke_token(self: "InlineManager", already_initialised: bool = True):
+        await self._stop()
+
         if already_initialised:
-            await self._stop()
             logger.error("Got polling conflict. Attempting token revocation...")
 
         self._db.set("heroku.inline", "bot_token", None)

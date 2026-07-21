@@ -131,6 +131,40 @@ class CommandDispatcher:
 
         self.raw_handlers = []
 
+    @staticmethod
+    def _patch_message_emoji_methods(message: Message) -> Message:
+        if not isinstance(message, Message) or getattr(
+            message, "_heroku_exteragram_wrapped", False
+        ):
+            return message
+
+        def transform(value):
+            return (
+                utils.replace_tg_emoji_tags(value, message)
+                if isinstance(value, str)
+                else value
+            )
+
+        def wrap(method):
+            async def wrapped(*args, **kwargs):
+                if args:
+                    args = (transform(args[0]), *args[1:])
+                for key in ("text", "message", "caption"):
+                    if key in kwargs and isinstance(kwargs[key], str):
+                        kwargs[key] = transform(kwargs[key])
+                return await method(*args, **kwargs)
+
+            return wrapped
+
+        with contextlib.suppress(Exception):
+            message.edit = wrap(message.edit)
+        with contextlib.suppress(Exception):
+            message.respond = wrap(message.respond)
+        with contextlib.suppress(Exception):
+            message.reply = wrap(message.reply)
+        message._heroku_exteragram_wrapped = True
+        return message
+
     async def _handle_ratelimit(self, message: Message, func: Callable) -> bool:
         if await self.security.check(message, security.OWNER):
             return True
@@ -419,6 +453,7 @@ class CommandDispatcher:
         if self._db.get(main.__name__, "grep", False) and not watcher:
             message = self._handle_grep(message)
 
+        message = self._patch_message_emoji_methods(message)
         return message, prefix, txt, func
 
     async def handle_raw(self, event: events.Raw):
@@ -623,6 +658,7 @@ class CommandDispatcher:
     ):
         """Handle all incoming messages"""
         message = utils.censor(getattr(event, "message", event))
+        message = self._patch_message_emoji_methods(message)
 
         blacklist_chats = self._db.get(main.__name__, "blacklist_chats", [])
         whitelist_chats = self._db.get(main.__name__, "whitelist_chats", [])

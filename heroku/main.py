@@ -15,6 +15,7 @@
 import argparse
 import asyncio
 import collections
+import contextlib
 import importlib
 import json
 import logging
@@ -488,7 +489,6 @@ def parse_arguments() -> dict:
     )
     parser.add_argument(
         "--no-web",
-        dest="no_web",
         action="store_true",
         help=argparse.SUPPRESS,
     )
@@ -565,6 +565,7 @@ class Heroku:
 
         self.clients = SuperList()
         self.ready = asyncio.Event()
+        self._session_init_blocked = False
         self._migrate_sessions()
         self._read_sessions()
         self._get_api_token()
@@ -666,38 +667,43 @@ class Heroku:
         """Get API Token from disk or environment"""
         api_token_type = collections.namedtuple("api_token", ("ID", "HASH"))
 
-        # Try to retrieve credintials from config, or from env vars
-        try:
-            # Legacy migration
-            if not get_config_key("api_id"):
+        api_id = get_config_key("api_id")
+        api_hash = get_config_key("api_hash")
+        legacy_path = Path(BASE_DIR) / "api_token.txt"
+        if (not api_id or not api_hash) and legacy_path.is_file():
+            try:
                 api_id, api_hash = (
-                    line.strip()
-                    for line in (Path(BASE_DIR) / "api_token.txt")
-                    .read_text()
-                    .splitlines()
+                    line.strip() for line in legacy_path.read_text().splitlines()
                 )
                 save_config_key("api_id", int(api_id))
                 save_config_key("api_hash", api_hash)
-                (Path(BASE_DIR) / "api_token.txt").unlink()
+                self._get_api_token()
+                legacy_path.unlink()
                 logging.debug("Migrated api_token.txt to config.json")
+                return
+            except (TypeError, ValueError):
+                logging.warning("Legacy api_token.txt is invalid")
 
-            api_token = api_token_type(
-                get_config_key("api_id"),
-                get_config_key("api_hash"),
-            )
-        except FileNotFoundError:
+        if not api_id or not api_hash:
             try:
-                from . import api_token
-            except ImportError:
-                try:
-                    api_token = api_token_type(
-                        os.environ["api_id"],
-                        os.environ["api_hash"],
-                    )
-                except KeyError:
-                    api_token = None
+                from . import api_token as bundled_api_token
 
-        self.api_token = api_token
+                api_id = bundled_api_token.ID
+                api_hash = bundled_api_token.HASH
+            except (AttributeError, ImportError):
+                api_id = os.environ.get("api_id")
+                api_hash = os.environ.get("api_hash")
+
+        try:
+            api_id = int(api_id)
+        except (TypeError, ValueError):
+            api_id = 0
+
+        self.api_token = (
+            api_token_type(api_id, api_hash)
+            if api_id > 0 and isinstance(api_hash, str) and len(api_hash) == 32
+            else None
+        )
 
     async def _get_token(self):
         """Reads or waits for user to enter API credentials"""
@@ -999,12 +1005,21 @@ class Heroku:
         Reads session from disk and inits them
         :returns: `True` if at least one client started successfully
         """
+        self._session_init_blocked = False
+        api_token = self.api_token
+        if api_token is None:
+            return False
+
         for session in self.sessions.copy():
+            client = None
+            keep_client = False
+            reload_sessions = False
+            delete_session = False
             try:
                 client = CustomTelegramClient(
                     session,
-                    self.api_token.ID,
-                    self.api_token.HASH,
+                    api_token.ID,
+                    api_token.HASH,
                     connection=self.conn,
                     proxy=self.proxy,
                     connection_retries=None,
@@ -1024,7 +1039,9 @@ class Heroku:
                     raise InteractiveAuthRequired
 
                 self.clients += [client]
+                keep_client = True
             except sqlite3.OperationalError:
+                self._session_init_blocked = True
                 logging.error(
                     "Check that this is the only instance running. "
                     "If that doesn't help, delete the file '%s'",
@@ -1037,23 +1054,43 @@ class Heroku:
                 self.sessions.remove(session)
             except TypeError:
                 logging.exception("Failed to initialize session %s", session.filename)
-                self.sessions.remove(session)
-            except (ValueError, ApiIdInvalidError):
+                self._session_init_blocked = True
+            except ApiIdInvalidError:
                 # Bad API hash/ID
                 run_config()
+                self._get_api_token()
+                reload_sessions = True
                 return False
+            except ValueError:
+                logging.exception("Invalid session or connection configuration")
+                self._session_init_blocked = True
             except PhoneNumberInvalidError:
                 logging.error(
                     "Phone number is incorrect. Use international format (+XX...) "
                     "and don't put spaces in it."
                 )
                 self.sessions.remove(session)
+                delete_session = True
             except (AuthKeyUnregisteredError, InteractiveAuthRequired):
                 logging.error(
                     "Session %s was terminated and re-auth is required",
                     session.filename,
                 )
                 self.sessions.remove(session)
+                delete_session = True
+            finally:
+                if client is not None and not keep_client:
+                    with contextlib.suppress(Exception):
+                        await client.disconnect()
+                if delete_session:
+                    for suffix in ("", "-journal", "-wal", "-shm"):
+                        with contextlib.suppress(OSError):
+                            Path(f"{session.filename}{suffix}").unlink(missing_ok=True)
+                if reload_sessions:
+                    for loaded_session in self.sessions:
+                        with contextlib.suppress(Exception):
+                            loaded_session.close()
+                    self._read_sessions()
 
         return bool(self.clients)
 
@@ -1233,12 +1270,25 @@ class Heroku:
 
     async def _main(self):
         """Main entrypoint"""
-        await self._get_token()
+        initialized = bool(self.clients)
+        while not initialized:
+            await self._get_token()
+            if self.api_token is None:
+                return
 
-        if (
-            not self.clients and not self.sessions or not await self._init_clients()
-        ) and not await self._initial_setup():
-            return
+            initialized = bool(self.sessions) and await self._init_clients()
+            if initialized:
+                break
+            if self._session_init_blocked:
+                logging.critical(
+                    "Saved sessions could not be opened; refusing to overwrite them"
+                )
+                return
+            if self.sessions:
+                continue
+            initialized = await self._initial_setup()
+            if not initialized:
+                return
 
         self.loop.set_exception_handler(
             lambda _, x: logging.error(

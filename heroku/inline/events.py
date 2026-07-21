@@ -36,7 +36,7 @@ class Events(InlineUnit):
         match True:
             case _ if (
                 wrapped_message.chat.type != "private"
-                or wrapped_message.text == "/start heroku init"
+                or wrapped_message.text in {"/start ratko init", "/start heroku init"}
             ):
                 return
 

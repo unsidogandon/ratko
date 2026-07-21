@@ -422,7 +422,6 @@ inline_stuff:
   bot_username_occupied: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Username occupied</b>"
   bot_updated: "<tg-emoji emoji-id=6318792204118656433>🎉</tg-emoji> <b>Config saved. Reboot required.</b>"
   this_is_heroku: "{} <b>{} Userbot. Modular Telegram automation.</b>"
-  support_chat_caption: "Support"
   profile_cmd: "ℹ️ System Status\n\n<blockquote>• Prefix: {prefix}\n• RAM: {ram_usage} MB\n• CPU: {cpu_usage}%\n• Host: {host}</blockquote>"
   restart: "🔄 Restarting daemon.."
   prefix_reset: "🔀 Prefix reset."
@@ -660,7 +659,6 @@ loader:
   _cmd_doc_dlmall: Install every module from selected repository
   _cmd_doc_ml: <module> - Export module as file
   result: "<tg-emoji emoji-id=5337183664630709422>🔎</tg-emoji> <b>Lookup result:</b> <code>{query}</code>\n\n<tg-emoji emoji-id=5258270535710317499>📦</tg-emoji> <b>{name}</b> by <b>{dev}</b>\n<tg-emoji emoji-id=5879813604068298387>ℹ️</tg-emoji> <i>{cls_doc}</i>\n<tg-emoji emoji-id=5372981976804366741>🤖</tg-emoji> <b>Commands:</b>\n{commands}\n\n<tg-emoji emoji-id=5188377234380954537>🪐</tg-emoji> <code>{prefix}dlmod {mhash}</code>"
-  verify_required: '<tg-emoji emoji-id=5188463524568926712>⚠️</tg-emoji> <b>PermissionError: third-party module installs locked. Resolve via <a href="https://t.me/{}?start=lm_verify">your bot</a></b>'
 translations:
   name: "Translations"
   lang_saved: "{} <b>Locale saved!</b>"
@@ -728,7 +726,6 @@ quickstart:
   base: "<tg-emoji emoji-id=5463379725441341739>🪐</tg-emoji> <b>Greetings, user.</b> Your <b>{}</b> userbot daemon is now successfully compiled and running.\n\n<tg-emoji emoji-id=5134202243486057363>💫</tg-emoji> <b>RTFM didn't help?</b> SSH into <a href=\"https://github.com/unsidogandon/ratko/issues\">our support chat</a>. We provide open-source support for <b>all users</b>.\n\n<tg-emoji emoji-id=4940480187436369099>💁‍♀️</tg-emoji> <b>Quick Manpage (TL;DR):</b>\n\n<tg-emoji emoji-id=5456197350416486261>1️⃣</tg-emoji> <b>Execute</b> <code>.help</code> <b>to output the directory of installed modules</b>\n<tg-emoji emoji-id=5456261689026581678>2️⃣</tg-emoji> <b>Execute</b> <code>.help &lt;Module name/command&gt;</code> <b>to print the manpage of a specific module</b>\n<tg-emoji emoji-id=5458366235886522404>3️⃣</tg-emoji> <b>Execute</b> <code>.dlmod &lt;link&gt;</code> <b>to wget and compile a module from a URI</b>\n<tg-emoji emoji-id=5456207331920483861>4️⃣</tg-emoji> <b>Execute</b> <code>.loadmod</code> <b>piped from a file to source a module directly</b>\n<tg-emoji emoji-id=5456185418997340146>5️⃣</tg-emoji> <b>Execute</b> <code>.unloadmod &lt;Module name&gt;</code> <b>to sigkill and remove a module from memory</b>\n\n<tg-emoji emoji-id=5456178297941561360>💡</tg-emoji> <b>Ratko is fully POSIX-compliant with modules from Hikka, Friendly-Telegram, and GeekTG, alongside its native repository.</b>\n"
   language_saved: "🇬🇧 Locale saved!"
   language: "🇬🇧 English"
-  btn_support: "🥷 Support"
   _cls_doc: "Installation Notification"
 
 $validators:
@@ -793,35 +790,3 @@ heroku_plugin_security:
   no_hash: <tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Module name required</b>
   hash_not_found: <tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Module lookup returned null</b>
   hash_not_found_suggest: <tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>No exact hit. Closest symbol:</b> <code>{}</code>
-loader_restrictor:
-  name: "LoaderRestrictor"
-  q1: "What's the actual permission scope of any module you install?"
-  q1_ans1: "Exactly what's declared in its docstring, nothing more"
-  q1_ans2: "Read-only, scoped to the chat it was invoked in"
-  q1_ans3: "Executes only on explicit function call"
-  q1_ans4: "Same as root: full read/write on your Telegram account, including account deletion"
-  q1_hint: "Base image has some guardrails, but a module can still escalate to full account access"
-  q2: "Unknown user DMs you, asks you to test-run their module. git pull and execute?"
-  q2_ans1: "Sure, why not"
-  q2_ans2: "Code review first (manual/LLM). If unclear: report to support with #check_scam, tag the source"
-  q2_ans3: "Ask the author for a signed guarantee, trust it"
-  q2_ans4: "Deploy to a throwaway account first - sandboxed, safer"
-  q2_hint: "Anything outside the official registry needs a code review before merge. No exceptions"
-  q3: "Does a module get filesystem/OS access on the host, or is it sandboxed to the Telegram API?"
-  q3_ans1: "Sandboxed - no filesystem access outside the Telegram API"
-  q3_ans2: "Only with an explicit Telegram grant"
-  q3_ans3: "No sandbox - it's an in-process import: full read/write/delete on the filesystem"
-  q3_ans4: "Media files only"
-  q3_hint: "The userbot is just a Python process on your host. A module runs in that same process, same permissions"
-  q4: "Would stdout/logs show it if a module started acting without authorization (exfil, etc.)?"
-  q4_ans1: "Yes, Telegram would push a security alert"
-  q4_ans2: "Yes, I'd catch it in the logs"
-  q4_ans3: "No, but the base sandboxing should catch it"
-  q4_ans4: "Not guaranteed - it can run silently, no log output, until it's too late"
-  q4_hint: "Silent failure is the real threat model here: no code review means no early warning, only post-mortem"
-  timeout: "<tg-emoji emoji-id=5447644880824181073>⚠️</tg-emoji> <b>TimeoutError: quiz not completed in time. Retry:</b> <code>/start lm_verify</code>"
-  failed: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>AssertionError: wrong answer. To unlock third-party installs, retry:</b> <code>/start lm_verify</code>"
-  already_passed: "<tg-emoji emoji-id=5118861066981344121>✅</tg-emoji> <b>Check already passed - third-party install permission granted</b>"
-  unlocked: "<tg-emoji emoji-id=5118861066981344121>✅</tg-emoji> <b>Check passed, third-party install permission granted</b>"
-  unlock_prompt: "<tg-emoji emoji-id=5447644880824181073>⚠️</tg-emoji> <b>PermissionError: third-party module installs locked. Run the check to resolve</b>"
-  unlock_prompt_btn: "Run check()"

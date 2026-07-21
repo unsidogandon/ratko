@@ -41,6 +41,52 @@ emoji_pattern = re.compile(
 
 parser = herokutl.utils.sanitize_parse_mode("html")
 logger = logging.getLogger(__name__)
+TG_EMOJI_TAG_PATTERN = re.compile(
+    r"<tg-emoji\s+emoji-id=(?:\"([^\"]+)\"|'([^']+)'|([^\s>]+))>(.*?)</tg-emoji>",
+    flags=re.IGNORECASE | re.DOTALL,
+)
+LEGACY_EMOJI_TAG_PATTERN = re.compile(
+    r"<emoji\s+document_id=(?:\"([^\"]+)\"|'([^']+)'|([^\s>]+))>(.*?)</emoji>",
+    flags=re.IGNORECASE | re.DOTALL,
+)
+
+
+def use_exteragram_emoji_links(message: typing.Any) -> bool:
+    if isinstance(message, Message):
+        client = getattr(message, "client", None)
+    elif hasattr(message, "loader") and hasattr(message, "heroku_me"):
+        client = message
+    else:
+        client = getattr(message, "client", None)
+
+    if client is None or getattr(
+        getattr(client, "heroku_me", None), "premium", False
+    ):
+        return False
+
+    loader = getattr(client, "loader", None)
+    db = getattr(loader, "db", None)
+    if db is None:
+        return False
+
+    return bool(db.get("HerokuSettingsMod", "exteragram_emoji", True))
+
+
+def replace_tg_emoji_tags(response: str, message: typing.Any) -> str:
+    if not isinstance(response, str) or (
+        "<tg-emoji" not in response and "<emoji" not in response
+    ):
+        return response
+
+    if not use_exteragram_emoji_links(message):
+        return response
+
+    def replace(match: re.Match) -> str:
+        emoji_id = next(group for group in match.group(1, 2, 3) if group is not None)
+        return f'<a href="tg://emoji?id={emoji_id}">{match.group(4)}</a>'
+
+    response = TG_EMOJI_TAG_PATTERN.sub(replace, response)
+    return LEGACY_EMOJI_TAG_PATTERN.sub(replace, response)
 
 
 def get_topic(message: Message) -> int | None:
@@ -342,6 +388,9 @@ async def answer(
             message.client.parse_mode,
         )
     )
+
+    if isinstance(response, str):
+        response = replace_tg_emoji_tags(response, message)
 
     if isinstance(response, str) and not kwargs.pop("asfile", False):
         text, entities = parse_mode.parse(response)

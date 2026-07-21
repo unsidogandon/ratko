@@ -124,24 +124,6 @@ class InlineStuff(loader.Module):
                         if self._client.heroku_me.premium is True
                         else "Ratko",
                     ),
-                    reply_markup=self.inline.generate_markup(
-                        markup_obj=[
-                            [
-                                {
-                                    "text": "GitHub",
-                                    "url": "https://github.com/unsidogandon/ratko",
-                                    "emoji_id": "5231065262228250587",
-                                }
-                            ],
-                            [
-                                {
-                                    "text": self.strings["support_chat_caption"],
-                                    "url": "https://github.com/unsidogandon/ratko/issues",
-                                    "emoji_id": "5363805650327450240",
-                                }
-                            ],
-                        ]
-                    ),
                 )
             case "/profile":
                 if message.from_user.id != self.client.tg_id:

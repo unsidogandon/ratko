@@ -46,6 +46,9 @@ from ..types import CoreOverwriteError, CoreUnloadError
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_MODULES_REPO = "https://raw.githubusercontent.com/unsidogandon/ratko/main"
+LEGACY_MODULES_REPO = "https://raw.githubusercontent.com/coddrago/modules/main"
+
 
 class FakeOne:
     def __eq__(self, other):
@@ -80,7 +83,7 @@ class LoaderMod(loader.Module):
         self.config = loader.ModuleConfig(
             loader.ConfigValue(
                 "MODULES_REPO",
-                "https://raw.githubusercontent.com/coddrago/modules/main",
+                DEFAULT_MODULES_REPO,
                 lambda: self.strings["repo_config_doc"],
                 validator=loader.validators.Link(),
             ),
@@ -117,23 +120,19 @@ class LoaderMod(loader.Module):
         )
 
     async def _async_init(self):
-        modules = list(
-            filter(
-                lambda x: not x.startswith(
-                    "https://raw.githubusercontent.com/coddrago/modules/main"
-                ),
-                utils.array_sum(
-                    map(
-                        lambda x: list(x.values()),
-                        (await self.get_repo_list()).values(),
-                    )
-                ),
+        modules = utils.array_sum(
+            map(
+                lambda x: list(x.values()),
+                (await self.get_repo_list()).values(),
             )
         )
         logger.debug("Modules: %s", modules)
         asyncio.ensure_future(self._storage.preload(modules))
 
     async def client_ready(self):
+        if self.config["MODULES_REPO"].rstrip("/") == LEGACY_MODULES_REPO:
+            self.config["MODULES_REPO"] = DEFAULT_MODULES_REPO
+
         while not (settings := self.lookup("settings")):
             await asyncio.sleep(0.5)
 
@@ -206,21 +205,8 @@ class LoaderMod(loader.Module):
             return f"{parts[0]}/{parts[1]}"
         return repo
 
-    async def _check_pass(self, message: Message | InlineCall) -> bool:
-        if self.lookup("LoaderRestrictor").get("passed", False):
-            return False
-
-        await utils.answer(
-            message,
-            self.strings["verify_required"].format(self.inline.bot_username),
-        )
-        return True
-
     @loader.command(alias="dlm")
     async def dlmod(self, message: Message, force_pm: bool = False):
-        if await self._check_pass(message):
-            return
-
         if args := utils.get_args(message):
             match args:
                 case [single]:
@@ -285,9 +271,6 @@ class LoaderMod(loader.Module):
 
     @loader.command()
     async def dlmall(self, message: Message):
-        if await self._check_pass(message):
-            return
-
         repos = [self.config["MODULES_REPO"]] + self.config["ADDITIONAL_REPOS"]
         repos = [r for r in repos if r.startswith("http")]
         buttons = [
@@ -350,8 +333,11 @@ class LoaderMod(loader.Module):
         logger.debug("Loading modules: %s", todo)
         return todo
 
-    async def _get_repo(self, repo: str) -> str:
+    async def _get_repo(self, repo: str) -> list[str]:
         repo = repo.strip("/")
+
+        if repo == DEFAULT_MODULES_REPO:
+            return []
 
         if self._links_cache.get(repo, {}).get("exp", 0) >= time.time():
             return self._links_cache[repo]["data"]
@@ -376,7 +362,11 @@ class LoaderMod(loader.Module):
 
         self._links_cache[repo] = {
             "exp": time.time() + 5 * 60,
-            "data": [link for link in res.text.strip().splitlines() if link],
+            "data": [
+                link.strip()
+                for link in res.text.splitlines()
+                if link.strip() and not link.lstrip().startswith("#")
+            ],
         }
 
         return self._links_cache[repo]["data"]
@@ -485,16 +475,10 @@ class LoaderMod(loader.Module):
         path_: str,
         mode: str,
     ):
-        if await self._check_pass(call):
-            return
-
         await self.load_module(doc, call, origin=path_ or "<string>", save_fs=True)
 
     @loader.command(alias="lm")
     async def loadmod(self, message: Message):
-        if await self._check_pass(message):
-            return
-
         msg = message if message.file else (await message.get_reply_message())
 
         if msg is None or msg.media is None:

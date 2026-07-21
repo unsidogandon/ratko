@@ -25,6 +25,7 @@ try:
 except ImportError:
     redis = None
 
+from herokutl.tl.functions.channels import EditTitleRequest
 from herokutl.tl.types import Message, User
 
 from . import main, utils
@@ -50,6 +51,9 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+
+CONTENT_CHANNEL_TITLE = "ratko-userbot"
+LEGACY_CONTENT_CHANNEL_TITLE = "heroku-userbot"
 
 _RATKO_OWNER_MIGRATIONS = {
     "ratko.main": "heroku.main",
@@ -160,42 +164,90 @@ class Database(dict):
         ) is not None:
             changed = True
 
+        forums_data = dict.get(self, "heroku.forums")
+        forums_cache = (
+            forums_data.get("forums_cache") if isinstance(forums_data, dict) else None
+        )
+        if isinstance(forums_cache, dict) and LEGACY_CONTENT_CHANNEL_TITLE in forums_cache:
+            legacy_cache = forums_cache.pop(LEGACY_CONTENT_CHANNEL_TITLE)
+            current_cache = forums_cache.get(CONTENT_CHANNEL_TITLE, {})
+            if not isinstance(legacy_cache, dict):
+                legacy_cache = {}
+            if not isinstance(current_cache, dict):
+                current_cache = {}
+            forums_cache[CONTENT_CHANNEL_TITLE] = {**legacy_cache, **current_cache}
+            changed = True
+
         return changed
+
+    async def _normalize_content_channel_title(self, content_channel):
+        if (
+            getattr(content_channel, "title", "").lower()
+            != LEGACY_CONTENT_CHANNEL_TITLE
+        ):
+            return content_channel
+
+        try:
+            await self._client(
+                EditTitleRequest(
+                    channel=content_channel,
+                    title=CONTENT_CHANNEL_TITLE,
+                )
+            )
+            content_channel.title = CONTENT_CHANNEL_TITLE
+        except Exception:
+            logger.exception("Failed to rename the legacy Ratko content channel")
+
+        return content_channel
 
     async def ensure_content_channel(self):
         content_channel = None
         existing_channel_id = self.get("heroku.forums", "channel_id", None)
+        titled_channel = None
 
-        if existing_channel_id:
-            try:
-                content_channel = await self._client.get_entity(existing_channel_id)
+        async for dialog in self._client.iter_dialogs():
+            dialog_id = getattr(dialog.entity, "id", None)
+            dialog_title = (dialog.title or "").lower()
+            if existing_channel_id and dialog_id == existing_channel_id:
+                content_channel = dialog.entity
                 logger.debug(
                     "Found existing content channel with ID %s in database",
                     existing_channel_id,
                 )
-            except Exception as e:
-                logger.warning(
-                    f"Saved channel ID {existing_channel_id} not found or inaccessible: {e}"
-                )
-                content_channel = None
-                self.set("heroku.forums", "forums_cache", {"heroku-userbot": {}})
+                break
+            if dialog_title in {
+                CONTENT_CHANNEL_TITLE,
+                LEGACY_CONTENT_CHANNEL_TITLE,
+            }:
+                titled_channel = dialog.entity
 
-        if not content_channel:
-            async for dialog in self._client.iter_dialogs():
-                if dialog.title and "heroku-userbot" in dialog.title.lower():
-                    content_channel = dialog.entity
-                    logger.debug(
-                        "Found existing channel '%s' with ID %s",
-                        dialog.title,
-                        dialog.entity.id,
-                    )
-                    self.set("heroku.forums", "channel_id", int(dialog.entity.id))
-                    break
+        if not content_channel and titled_channel:
+            content_channel = titled_channel
+            logger.debug(
+                "Found existing channel '%s' with ID %s",
+                content_channel.title,
+                content_channel.id,
+            )
+
+        if existing_channel_id and not content_channel:
+            logger.warning(
+                "Saved content channel ID %s is absent from Telegram dialogs; "
+                "creating a new channel",
+                existing_channel_id,
+            )
+            self.set("heroku.forums", "channel_id", None)
+            self.set("heroku.forums", "forum_id", None)
+            self.set("heroku.forums", "forums_cache", {CONTENT_CHANNEL_TITLE: {}})
+
+        if content_channel:
+            content_channel = await self._normalize_content_channel_title(
+                content_channel
+            )
 
         if not content_channel:
             content_channel, _ = await utils.asset_channel(
                 client=self._client,
-                title="heroku-userbot",
+                title=CONTENT_CHANNEL_TITLE,
                 description="Content related to Ratko will be here",
                 silent=True,
                 invite_bot=bool(
@@ -208,9 +260,15 @@ class Database(dict):
                 avatar="https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",
                 forum=True,
                 hide_general=True,
-                _folder="heroku",
+                _folder="Ratko",
             )
-            self.set("heroku.forums", "channel_id", int(content_channel.id))
+        content_channel_id = int(content_channel.id)
+        self.set("heroku.forums", "channel_id", content_channel_id)
+        self.set("heroku.forums", "forum_id", content_channel_id)
+
+        inline = getattr(self._client, "heroku_inline", None)
+        if getattr(inline, "init_complete", False):
+            await utils.invite_inline_bot(self._client, content_channel)
 
         return content_channel
 
@@ -334,7 +392,7 @@ class Database(dict):
 
         try:
             _assets_topic_id = self.get("heroku.forums", "forums_cache", {})[
-                "heroku-userbot"
+                CONTENT_CHANNEL_TITLE
             ]["Assets"]
         except (TypeError, KeyError):
             raise NoAssetsChannel("Tried to save asset to non-existing asset topic.")
@@ -371,7 +429,7 @@ class Database(dict):
 
         try:
             _assets_topic_id = self.get("heroku.forums", "forums_cache", {})[
-                "heroku-userbot"
+                CONTENT_CHANNEL_TITLE
             ]["Assets"]
         except (TypeError, KeyError):
             raise NoAssetsChannel("Tried to save asset to non-existing asset topic.")

@@ -24,6 +24,13 @@ from .. import loader, utils
 
 logger = logging.getLogger(__name__)
 
+OLD_CORE_EMOJI = "<tg-emoji emoji-id=4974681956907221809>▪️</tg-emoji>"
+OLD_PLAIN_EMOJI = "<tg-emoji emoji-id=4974508259839836856>▪️</tg-emoji>"
+OLD_EMPTY_EMOJI = "<tg-emoji emoji-id=5100652175172830068>🟠</tg-emoji>"
+MODULE_EMOJI = "☃️"
+OLD_DESC_ICON = "<tg-emoji emoji-id=5188377234380954537>🪐</tg-emoji>"
+DESC_ICON = "<tg-emoji emoji-id=5471950641918121951>🌘</tg-emoji>"
+
 
 @loader.tds
 class Help(loader.Module):
@@ -35,22 +42,22 @@ class Help(loader.Module):
         self.config = loader.ModuleConfig(
             loader.ConfigValue(
                 "core_emoji",
-                "<tg-emoji emoji-id=4974681956907221809>▪️</tg-emoji>",
+                MODULE_EMOJI,
                 lambda: "Core module bullet",
             ),
             loader.ConfigValue(
                 "plain_emoji",
-                "<tg-emoji emoji-id=4974508259839836856>▪️</tg-emoji>",
+                MODULE_EMOJI,
                 lambda: "Plain module bullet",
             ),
             loader.ConfigValue(
                 "empty_emoji",
-                "<tg-emoji emoji-id=5100652175172830068>🟠</tg-emoji>",
+                MODULE_EMOJI,
                 lambda: "Empty modules bullet",
             ),
             loader.ConfigValue(
                 "desc_icon",
-                "<tg-emoji emoji-id=5188377234380954537>🪐</tg-emoji>",
+                DESC_ICON,
                 lambda: "Desc emoji",
             ),
             loader.ConfigValue(
@@ -83,6 +90,18 @@ class Help(loader.Module):
                 validator=loader.validators.Boolean(),
             ),
         )
+
+    def config_complete(self):
+        migrations = {
+            "core_emoji": OLD_CORE_EMOJI,
+            "plain_emoji": OLD_PLAIN_EMOJI,
+            "empty_emoji": OLD_EMPTY_EMOJI,
+        }
+        for option, old_value in migrations.items():
+            if self.config[option] == old_value:
+                self.config[option] = MODULE_EMOJI
+        if self.config["desc_icon"] == OLD_DESC_ICON:
+            self.config["desc_icon"] = DESC_ICON
 
     def _get_banner_url(self, doc: str):
         match = re.search(r"# ?meta banner: ?(.+)", doc)

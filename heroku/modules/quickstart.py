@@ -11,11 +11,16 @@
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
 import logging
+import re
 
 from .. import loader, translations, utils
 from ..inline.types import BotInlineCall
 
 logger = logging.getLogger(__name__)
+
+
+def _without_links(text: str) -> str:
+    return re.sub(r'<a href="[^"]+">(.*?)</a>', r"\1", text)
 
 
 @loader.tds
@@ -25,43 +30,16 @@ class Quickstart(loader.Module):
     strings = {"name": "Quickstart"}
 
     async def client_ready(self):
-        self.text = lambda: self.strings["base"].format(
-            utils.get_platform_emoji()
-            if self.client.heroku_me.premium is True
-            else "Ratko"
+        self.text = lambda: _without_links(
+            self.strings["base"].format(
+                utils.get_platform_emoji()
+                if self.client.heroku_me.premium is True
+                else "Ratko"
+            ),
         )
 
         try:
-            content_channel = None
-            existing_channel_id = self.db.get("heroku.forums", "channel_id", None)
-
-            if existing_channel_id:
-                try:
-                    content_channel = await self.client.get_entity(existing_channel_id)
-                    logger.debug(
-                        f"Found existing content channel with ID {existing_channel_id}"
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"Saved channel ID {existing_channel_id} not found or inaccessible: {e}"
-                    )
-                    content_channel = None
-                    self.db.set("heroku.forums", "forums_cache", {"heroku-userbot": {}})
-
-            if not content_channel:
-                async for dialog in self.client.iter_dialogs():
-                    if dialog.title and "heroku-userbot" in dialog.title.lower():
-                        content_channel = dialog.entity
-                        logger.debug(
-                            f"Found existing channel '{dialog.title}' with ID {dialog.entity.id}"
-                        )
-                        self.db.set(
-                            "heroku.forums", "channel_id", int(dialog.entity.id)
-                        )
-                        break
-
-            if not content_channel:
-                content_channel = await self.db.ensure_content_channel()
+            content_channel = await self.db.ensure_content_channel()
 
             if not content_channel:
                 raise RuntimeError("Failed to get or create content channel!")
@@ -141,14 +119,7 @@ class Quickstart(loader.Module):
         if not self.inline.init_complete or not self.inline.bot:
             return
 
-        self.mark = lambda: [
-            [
-                {
-                    "text": self.strings["btn_support"],
-                    "url": "https://github.com/unsidogandon/ratko/issues",
-                }
-            ],
-        ] + utils.chunks(
+        self.mark = lambda: utils.chunks(
             [
                 {
                     "text": self.strings.get("language", lang),

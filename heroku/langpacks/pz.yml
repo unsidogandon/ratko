@@ -175,16 +175,9 @@ terminal:
   _cmd_doc_terminate: "[-f to force kill] - Отвiтьтi на сообщiнii, чтобы убiть процiсс"
 
 heroku_web:
-  privacy_leak: "⚠️ <b>Эта команда даiт доступ к вiб-iнтiрфiйсу ratko. Еi выполнiнii в публiчных чатах являiтся угрозой бiзопасностi. Прiдпочтiтiльно выполнять ii в <a href='tg://openmessage?user_id={}'>Избранных сообщiнiях</a>. Выполнi</b> <code>{}proxypass force_insecure</code> <b>чтобы отключiть это прiдупрiждiнii</b>"
-  privacy_leak_nowarn: "⚠️ <b>Эта команда даiт доступ к вiб-iнтiрфiйсу ratko. Еi выполнiнii в публiчных чатах являiтся угрозой бiзопасностi. Прiдпочтiтiльно выполнять ii в <a href='tg://openmessage?user_id={}'>Избранных сообщiнiях</a>.</b>"
-  opening_tunnel: "🔁 <b>Открываю тоннiль к вiб-iнтiрфiйсу ratko...</b>"
-  tunnel_opened: "🎉 <b>Тоннiль открыт. Эта ссылка будiт актiвна нi болii 20 мiнут</b>"
   host_denied: "<tg-emoji emoji-id=6037254263187443802>💬</tg-emoji> Команды добавлiнiя сiссiй нi доступны на вашiм хостiнгi, свяжiтiсь с адмiнiстрацiiй вашiго хостiнга."
-  web_btn: "🌍 Вiб-iнтiрфiйс"
-  _cmd_doc_weburl: "Открыть тоннiль к вiб-iнтiрфiйсу ratko"
   btn_yes: "🚸 Всi равно подтвiрдiть"
   btn_no: "🔻 Закрыть"
-  lavhost_web: "✌️ <b>По этой ссылкi ты попадiшь в вiб-iнтiрфiйс ratko на lavHost</b>\n\n<i>💡 Тiбi нужно будiт авторiзоваться, iспользуя данныi, указанныi прi настройкi lavHost</i>"
   invalid_target: "Отвiтьтi на сообщiнii чiловiка, которого хотiтi добавiть, iлi укажiтi iго коррiктный @username/id."
   cant_add_self: "Вы нi можiтi добавiть самого сiбя."
   add_user_confirm: "Вы дiйствiтiльно хотiтi добавiть аккаунт {} ({})?"
@@ -367,7 +360,6 @@ inline_stuff:
   bot_username_occupied: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Такой нiк бота ужi занят</b>"
   bot_updated: "<tg-emoji emoji-id=6318792204118656433>🎉</tg-emoji> <b>Настройкi сохранiны. Для iх прiмiнiнiя нужно пiрiзагрузiть юзiрбот</b>"
   this_is_heroku: "{} <b>Прiвiт! Это {} — мощный модульный Telegram юзiрбот. Вы можiтi установiть iго на свой аккаунт!</b>"
-  support_chat_caption: "Чат поддiржкi"
   profile_cmd: "ℹ️ Основная iнформацiя об юзiрботi\n\n<blockquote>• Прiфiкс: {prefix}\n• Использованii RAM: {ram_usage} МБ\n• Использованii CPU: {cpu_usage}%\n• Хостiнг: {host}</blockquote>"
   restart: "🔄 Ваша ratko пiрiзапускаiтся..."
   prefix_reset: "🔀 Прiфiкс сброшiн!"
@@ -641,7 +633,6 @@ quickstart:
   lavhost: "✌️ <b>Твой юзiрбот установлiн на lavHost</b>. Вступi в @lavhost, чтобы получать важныi увiдомлiнiя i обновлiнiя. Всi вопросы, связанныi с платформой, слiдуiт задавать в @lavhostchat."
   language_saved: "🇺🇦 Мову збережено!"
   language: "🇺🇦 потужні"
-  btn_support: "🥷 Чат поддiржкi"
 
 $validators:
   boolean: "логiчiскiм значiнiiм"

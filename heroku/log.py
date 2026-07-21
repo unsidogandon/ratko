@@ -14,6 +14,7 @@
 
 import asyncio
 import contextlib
+import copy
 import inspect
 import io
 import linecache
@@ -43,6 +44,7 @@ INTERNET_ERRORS = (
     ServerError,
     PersistentTimestampOutdatedError,
 )
+BOT_TOKEN_PATTERN = re.compile(r"\b\d{6,12}:[A-Za-z0-9_-]{30,}\b")
 old = linecache.getlines
 
 
@@ -430,8 +432,8 @@ class TelegramLogsHandler(logging.Handler):
 
                 while self._queue[client_id]:
                     if chunk := self._queue[client_id].pop(0):
-                        asyncio.ensure_future(
-                            self._mods[client_id].inline.bot.send_message(
+                        try:
+                            await self._mods[client_id].inline.bot.send_message(
                                 self._mods[client_id].logchat,
                                 f"<code>{chunk}</code>",
                                 disable_notification=True,
@@ -439,7 +441,8 @@ class TelegramLogsHandler(logging.Handler):
                                     client_id
                                 ),
                             )
-                        )
+                        except Exception:
+                            logging.debug("Failed to send log message", exc_info=True)
 
     async def _exc_sender(self, *funcs: typing.Callable[..., Coroutine]):
         for func in funcs:
@@ -545,12 +548,22 @@ class TelegramLogsHandler(logging.Handler):
             finally:
                 self.release()
 
-_main_formatter = logging.Formatter(
+
+class RatkoFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        if record.name == "heroku" or record.name.startswith("heroku."):
+            record = copy.copy(record)
+            record.name = f"ratko{record.name[len('heroku') :]}"
+
+        return BOT_TOKEN_PATTERN.sub("<redacted bot token>", super().format(record))
+
+
+_main_formatter = RatkoFormatter(
     fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     style="%",
 )
-_tg_formatter = logging.Formatter(
+_tg_formatter = RatkoFormatter(
     fmt="[%(levelname)s] %(name)s: %(message)s\n",
     datefmt=None,
     style="%",

@@ -172,6 +172,7 @@ class InlineManager(
         self.bot: TelethonBot = None
         self.bot_id: int = None
         self.bot_username: str = None
+        self._bot_entity = None
 
         self._bot_update_handlers: dict[str, tuple[str, typing.Callable]] = {}
         self._bot_handler_refs: dict[str, tuple[typing.Callable, object]] = {}
@@ -257,6 +258,9 @@ class InlineManager(
                 self.init_complete = False
                 return
 
+        if self._bot_client:
+            await self._stop()
+
         self.init_complete = True
 
         bot_uid = self._token.split(":", 1)[0]
@@ -272,12 +276,18 @@ class InlineManager(
 
         try:
             await self._bot_client.start(bot_token=self._token)
-            self.bot = TelethonBot(self._bot_client)
+            self.bot = TelethonBot(self._bot_client, self._client)
             self._bot = self.bot
             self._register_builtin_handlers()
             bot_me = await self._bot_client.get_me()
             self.bot_username = bot_me.username
             self.bot_id = bot_me.id
+            try:
+                self._bot_entity = await self._client.force_get_entity(
+                    f"@{self.bot_username}"
+                )
+            except Exception:
+                self._bot_entity = self.bot_username
         except (
             AccessTokenExpiredError,
             AccessTokenInvalidError,
@@ -342,27 +352,28 @@ class InlineManager(
             )
             return True
         except UserIsBlockedError:
-            await self._client(UnblockRequest(id=self.bot_id))
+            await self._client(UnblockRequest(id=self._bot_entity or self.bot_id))
             return True
         except Exception:
             pass
 
         try:
-            m = await self._client.send_message(self.bot_username, "/start heroku init")
+            bot_peer = self._bot_entity or self.bot_username
+            m = await self._client.send_message(bot_peer, "/start ratko init")
         except (InputUserDeactivatedError, ValueError):
             self._db.set("heroku.inline", "bot_token", None)
             self._token = False
 
             if not after_break:
-                return await self.register_manager(True)
+                return await self.restart_manager(after_break=True)
 
             self.init_complete = False
             return False
         except YouBlockedUserError:
-            await self._client(UnblockRequest(id=self.bot_username))
+            await self._client(UnblockRequest(id=bot_peer))
             try:
                 m = await self._client.send_message(
-                    self.bot_username, "/start heroku init"
+                    bot_peer, "/start ratko init"
                 )
             except Exception:
                 logger.critical("Can't unblock users bot", exc_info=True)
@@ -372,30 +383,41 @@ class InlineManager(
             logger.critical("Initialization of inline manager failed!", exc_info=True)
             return False
 
-        await self._client.delete_messages(self.bot_username, m)
+        await self._client.delete_messages(bot_peer, m)
         return True
 
     async def _stop(self):
         """Stop the bot"""
         if self._task:
             self._task.cancel()
-        if self._bot_client:
-            await self._bot_client.disconnect()
+            self._task = None
+
+        bot_client = self._bot_client
+        self._bot_client = None
+        if bot_client:
+            try:
+                await bot_client.disconnect()
+            except Exception as e:
+                logger.warning("Failed to disconnect inline bot cleanly: %s", e)
+                with contextlib.suppress(Exception):
+                    bot_client.session.close()
+
         if self._cleaner_task:
             self._cleaner_task.cancel()
+            self._cleaner_task = None
 
-    async def restart_manager(self):
-        """Restart the inline bot after its token changes."""
-        await self._stop()
         self.init_complete = False
-        self._token = self._db.get("heroku.inline", "bot_token", False)
-        self._bot_client = None
         self.bot = None
         self._bot = None
         self.bot_id = None
         self.bot_username = None
-        self._cleaner_task = None
-        return await self.register_manager()
+        self._bot_entity = None
+
+    async def restart_manager(self, after_break: bool = False):
+        """Restart the inline bot after its token changes."""
+        await self._stop()
+        self._token = self._db.get("heroku.inline", "bot_token", False)
+        return await self.register_manager(after_break=after_break)
 
     async def _restart_polling(self):
         """Kept for API compatibility; Telethon handlers are updated in-place."""

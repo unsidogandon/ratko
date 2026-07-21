@@ -50,11 +50,7 @@ PRESETS = {
         "https://github.com/amm1edev/ame_repo/raw/refs/heads/main/Complements.py",
         "https://github.com/amm1edev/ame_repo/raw/refs/heads/main/Compliments.py",
         "https://github.com/amm1edev/ame_repo/raw/refs/heads/main/mazemod.py",
-        "https://mods.codrago.life/randnum.py",
-        "https://mods.codrago.life/DoxTool.py",
-        "https://mods.codrago.life/randomizer.py",
         "https://mods.kok.gay/yg_quotes",
-        "https://raw.githubusercontent.com/coddrago/modules/main/hardspam.py",
     ],
     "chat": [
         "https://github.com/amm1edev/ame_repo/raw/refs/heads/main/activists.py",
@@ -65,11 +61,8 @@ PRESETS = {
         "https://github.com/amm1edev/ame_repo/raw/refs/heads/main/BanMedia.py",
         "https://github.com/amm1edev/ame_repo/raw/refs/heads/main/swmute.py",
         "https://github.com/amm1edev/ame_repo/raw/refs/heads/main/filter.py",
-        "https://mods.codrago.life/id.py",
-        "https://mods.codrago.life/autoclicker.py",
         "https://raw.githubusercontent.com/SenkoGuardian/SenModules/refs/heads/My-Modules/Gemini.py",
         "https://raw.githubusercontent.com/yummy1gay/modules/main/yg_checks.py",
-        "https://raw.githubusercontent.com/coddrago/modules/main/chatmodule.py",
     ],
     "service": [
         "https://github.com/amm1edev/ame_repo/raw/refs/heads/main/account_switcher.py",
@@ -85,7 +78,6 @@ PRESETS = {
         "https://github.com/amm1edev/ame_repo/raw/refs/heads/main/searx.py",
         "https://raw.githubusercontent.com/Ruslan-Isaev/modules/refs/heads/main/whois.py",
         "https://raw.githubusercontent.com/radiocycle/Modules/refs/heads/master/Neofetch.py",
-        "https://raw.githubusercontent.com/coddrago/modules/main/dbmod.py",
     ],
     "downloaders": [
         "https://github.com/amm1edev/ame_repo/raw/refs/heads/main/uploader.py",

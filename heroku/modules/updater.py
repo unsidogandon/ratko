@@ -91,6 +91,9 @@ class UpdaterMod(loader.Module):
             ),
         )
 
+    def _exteragram_text(self, text: str) -> str:
+        return utils.replace_tg_emoji_tags(text, self._client)
+
     @property
     def _target_ref(self) -> str:
         return f"origin/{self.config['GIT_BRANCH']}"
@@ -279,14 +282,16 @@ class UpdaterMod(loader.Module):
                 m = await self.inline.bot.send_photo(
                     self.tg_id,
                     f"{version.REPO_URL}/raw/{version.DEFAULT_BRANCH}/banner.jpg",
-                    caption=self.strings["update_required"].format(
-                        current[:6],
-                        f'<a href="{self._repo_url}/compare/{{}}...{{}}">{{}}</a>'.format(
-                            current[:12],
-                            self._pending[:12],
-                            self._pending[:6],
+                    caption=self._exteragram_text(
+                        self.strings["update_required"].format(
+                            current[:6],
+                            f'<a href="{self._repo_url}/compare/{{}}...{{}}">{{}}</a>'.format(
+                                current[:12],
+                                self._pending[:12],
+                                self._pending[:6],
+                            ),
+                            changelog,
                         ),
-                        changelog,
                     ),
                     reply_markup=self._markup(),
                 )
@@ -302,13 +307,15 @@ class UpdaterMod(loader.Module):
                 m = await self.inline.bot.send_photo(
                     self.tg_id,
                     f"{version.REPO_URL}/raw/{version.DEFAULT_BRANCH}/banner.jpg",
-                    caption=self.strings["autoupdate_notifier"].format(
-                        self._pending[:6],
-                        changelog,
-                        f'<a href="{self._repo_url}/compare/{{}}...{{}}">{{}}</a>'.format(
-                            current[:12],
-                            self._pending[:12],
-                            "🔎 diff",
+                    caption=self._exteragram_text(
+                        self.strings["autoupdate_notifier"].format(
+                            self._pending[:6],
+                            changelog,
+                            f'<a href="{self._repo_url}/compare/{{}}...{{}}">{{}}</a>'.format(
+                                current[:12],
+                                self._pending[:12],
+                                "🔎 diff",
+                            ),
                         ),
                     ),
                 )
@@ -507,7 +514,7 @@ class UpdaterMod(loader.Module):
 
     async def download_common(self):
         def _sync():
-            repo_root = Path(__file__).resolve().parents[2]
+            repo_root = Path(version.__file__).resolve().parent.parent
             with Repo(repo_root) as repo:
                 if repo.is_dirty(untracked_files=False):
                     raise RuntimeError("Tracked local changes prevent a safe update")
@@ -773,7 +780,7 @@ class UpdaterMod(loader.Module):
             await self.inline.bot.send_photo(
                 self.tg_id,
                 photo=f"{version.REPO_URL}/raw/{version.DEFAULT_BRANCH}/banner.jpg",
-                caption=self.strings["autoupdate"],
+                caption=self._exteragram_text(self.strings["autoupdate"]),
                 reply_markup=self.inline.generate_markup(
                     [
                         [
@@ -895,6 +902,7 @@ class UpdaterMod(loader.Module):
             took = "n/a"
 
         msg = self.strings["success"].format(utils.ascii_face(), took)
+        msg = self._exteragram_text(msg)
         ms = self.get("selfupdatemsg")
 
         if legacy_message_ref := self._parse_legacy_update_message_ref(ms):
@@ -933,6 +941,8 @@ class UpdaterMod(loader.Module):
             msg = self.strings[
                 "secure_boot_fail" if secure_boot else "full_fail"
             ].format(utils.ascii_face(), took, fails)
+
+        msg = self._exteragram_text(msg)
 
         if ms is None:
             return

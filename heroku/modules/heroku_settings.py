@@ -337,8 +337,10 @@ class HerokuSettingsMod(loader.Module):
         )
 
     async def inline__setting(self, call: InlineCall, key: str, state: bool = False):
-
-        self.db.set(main.__name__, key, state)
+        if key == "exteragram_emoji":
+            self.set(key, state)
+        else:
+            self.db.set(main.__name__, key, state)
 
         if key == "no_nickname" and state and self.get_prefix() == ".":
             await call.answer(
@@ -482,6 +484,21 @@ class HerokuSettingsMod(loader.Module):
                             "suggest_subscribe",
                             True,
                         ),
+                    }
+                ),
+            ],
+            [
+                (
+                    {
+                        "text": "✅ exteraGram эмодзи",
+                        "callback": self.inline__setting,
+                        "args": ("exteragram_emoji", False),
+                    }
+                    if self.get("exteragram_emoji", True)
+                    else {
+                        "text": "🚫 exteraGram эмодзи",
+                        "callback": self.inline__setting,
+                        "args": ("exteragram_emoji", True),
                     }
                 ),
             ],

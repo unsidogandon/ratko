@@ -76,12 +76,20 @@ async def invite_inline_bot(
     :raise RuntimeError: If error occurred while inviting bot
     """
 
-    try:
-        await client(InviteToChannelRequest(peer, [client.loader.inline.bot_username]))
-    except Exception as e:
-        raise RuntimeError(
-            f"Can't invite inline bot to old asset chat, which is required by module: {e}"
-        )
+    bot_id = client.loader.inline.bot_id
+    if not any(
+        participant.id == bot_id
+        for participant in await client.get_participants(peer, limit=100)
+    ):
+        try:
+            await client(
+                InviteToChannelRequest(peer, [client.loader.inline.bot_username])
+            )
+        except Exception as e:
+            raise RuntimeError(
+                "Can't invite inline bot to the asset chat, "
+                f"which is required by module: {e}"
+            ) from e
 
     with contextlib.suppress(Exception):
         await client(
