@@ -123,29 +123,29 @@ def get_platform_emoji() -> str:
 
     BASE = "".join(
         (
-            "<tg-emoji emoji-id={}>🪐</tg-emoji>",
-            "<tg-emoji emoji-id=5352934134618549768>🪐</tg-emoji>",
-            "<tg-emoji emoji-id=5352663371290271790>🪐</tg-emoji>",
-            "<tg-emoji emoji-id=5350822883314655367>🪐</tg-emoji>",
+            "<tg-emoji emoji-id={}>🥶</tg-emoji>",
+            "<tg-emoji emoji-id=5451610746251158913>🥶</tg-emoji>",
+            "<tg-emoji emoji-id=5449592064377398434>🥶</tg-emoji>",
+            "<tg-emoji emoji-id=5451676721243793322>🥶</tg-emoji>",
         )
     )
 
     match True:
 
         case _ if IS_HIKKAHOST:
-            return BASE.format(5395745114494624362)
+            return BASE.format(5451886105194440191)
 
         case _ if IS_JAMHOST:
-            return BASE.format(5242536621659678947)
+            return BASE.format(5451886105194440191)
 
         case _ if IS_USERLAND:
-            return BASE.format(5458877818031077824)
+            return BASE.format(5451886105194440191)
 
         case _ if IS_DOCKER:
-            return BASE.format(5352678227582152630)
+            return BASE.format(5451886105194440191)
 
         case _:
-            return BASE.format(5393588431026674882)
+            return BASE.format(5451886105194440191)
 
 
 def uptime() -> int:
