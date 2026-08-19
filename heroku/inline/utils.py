@@ -226,28 +226,15 @@ class Utils(InlineUnit):
     generate_markup = _generate_markup
 
     async def _close_unit_handler(self: "InlineManager", call: InlineCall):
-        if call._units is None:
-            logger.error(
-                "call._units is None. Please report this issue to the developers. "
-                "Debug info: %s",
-                call.model_dump_json(),
-            )
-            try:
-                await call.answer(
-                    "❌ The userbot couldn't delete this inline message. "
-                    "See logs for more details."
-                )
-            except Exception:
-                logger.exception(
-                    "I can't even properly notify the user about the error 😭"
-                )
-
-            return
-
-        return await self._client.delete_messages(
-            call._units.get(call.unit_id).get("chat"),
-            call._units.get(call.unit_id).get("message_id"),
+        deleted = await self._delete_unit_message(
+            call,
+            unit_id=getattr(call, "unit_id", None),
         )
+        try:
+            await call.answer("" if deleted else "Error occurred", show_alert=not deleted)
+        except Exception:
+            pass
+        return deleted
 
     async def _unload_unit_handler(self: "InlineManager", call: InlineCall):
         await call.unload()
@@ -575,34 +562,35 @@ class Utils(InlineUnit):
         message_id: int | None = None,
     ) -> bool:
         """Params `self`, `unit_id` are for internal use only, do not try to pass them"""
-        if getattr(getattr(call, "message", None), "chat", None):
-            try:
-                await self.bot.delete_message(
-                    call.message.chat.id,
-                    call.message.message_id,
-                )
-            except Exception:
-                return False
+        if not isinstance(call, InlineCall):
+            call_message = getattr(call, "message", None)
+            call_chat = getattr(call_message, "chat", None)
+            chat_id = chat_id or getattr(call_chat, "id", None)
+            message_id = message_id or getattr(call_message, "id", None)
+            message_id = message_id or getattr(call_message, "message_id", None)
 
-            return True
+            if chat_id is not None and message_id is not None:
+                try:
+                    await self.bot.delete_message(chat_id, message_id)
+                except Exception:
+                    logger.debug(
+                        "Failed to delete bot message %s", unit_id, exc_info=True
+                    )
+                    return False
 
-        if chat_id and message_id:
-            try:
-                await self.bot.delete_message(chat_id, message_id)
-            except Exception:
-                return False
+                return True
 
-            return True
+        if not unit_id:
+            unit_id = getattr(call, "unit_id", None)
 
-        if not unit_id and hasattr(call, "unit_id") and call.unit_id:
-            unit_id = call.unit_id
+        unit = self._units.get(unit_id) if unit_id else None
+        if not unit or unit.get("chat") is None or unit.get("message_id") is None:
+            return False
 
         try:
-            await self._client.delete_messages(
-                call._units.get(unit_id).get("chat"),
-                call._units.get(unit_id).get("message_id"),
-            )
+            await self._client.delete_messages(unit["chat"], unit["message_id"])
         except Exception:
+            logger.debug("Failed to delete unit message %s", unit_id, exc_info=True)
             return False
 
         return True

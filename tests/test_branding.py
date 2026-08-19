@@ -18,14 +18,17 @@ class BrandingTest(unittest.TestCase):
 
     def test_default_module_catalog_is_owned_by_ratko(self):
         loader_source = Path("heroku/modules/loader.py").read_text()
-        presets_source = Path("heroku/modules/presets.py").read_text()
 
         self.assertIn(
             'DEFAULT_MODULES_REPO = "https://raw.githubusercontent.com/'
             'unsidogandon/ratko/main"',
             loader_source,
         )
-        self.assertNotIn("coddrago/modules", presets_source)
+        self.assertFalse(Path("heroku/modules/presets.py").exists())
+        self.assertNotIn(
+            'self.db.get("presets", "folders")',
+            Path("heroku/modules/heroku_config.py").read_text(),
+        )
         self.assertFalse(Path("full.txt").exists())
         self.assertIn("if repo == DEFAULT_MODULES_REPO:", loader_source)
 

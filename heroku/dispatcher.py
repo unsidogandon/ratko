@@ -344,24 +344,29 @@ class CommandDispatcher:
                     )
                 return False
 
-        match True:
-            case _ if (
-                event.message.message.startswith(
-                    str.translate(prefix, _LAYOUT_TRANSLATION)
-                )
-                and str.translate(prefix, _LAYOUT_TRANSLATION) != prefix
-            ):
-                message.message = str.translate(message.message, _LAYOUT_TRANSLATION)
-                message.text = str.translate(message.text, _LAYOUT_TRANSLATION)
-            case _ if not event.message.message.startswith(prefix):
-                return False
+        _translated_prefix = str.translate(prefix, _LAYOUT_TRANSLATION)
+        _switch_layout = (
+            _translated_prefix != prefix
+            and event.message.message.startswith(_translated_prefix)
+        )
+        if not _switch_layout and not event.message.message.startswith(prefix):
+            return False
+
+        _msg = (
+            str.translate(message.message, _LAYOUT_TRANSLATION)
+            if _switch_layout
+            else message.message
+        )
 
         if (
             event.sticker
             or event.dice
             or event.audio
             or event.via_bot_id
-            or getattr(event, "reactions", False)
+            or (
+                getattr(event, "reactions", False)
+                and getattr(event, "edit_hide", False)
+            )
         ):
             return False
 
@@ -374,10 +379,10 @@ class CommandDispatcher:
         ):
             return False
 
-        if not message.message or len(message.message.strip()) == len(prefix):
+        if not _msg or len(_msg.strip()) == len(prefix):
             return False  # Message is just the prefix
 
-        _cmd = message.message[len(prefix) :]
+        _cmd = _msg[len(prefix) :]
         command = _cmd.strip().split(maxsplit=1)[0]
         tag = command.split("@", maxsplit=1)
 
@@ -438,7 +443,15 @@ class CommandDispatcher:
 
         _cmd_offset = len(prefix) + len(_cmd) - len(_cmd.strip())
         if not watcher:
-            message.message = prefix + txt + message.message[_cmd_offset + len(command) :]
+            new_text = prefix + txt + _msg[_cmd_offset + len(command) :]
+            if new_text != message.message:
+                _offset = len(new_text) - len(message.message)
+
+                if _offset:
+                    utils.relocate_entities(message.entities, _offset)
+
+                message._text = None
+                message.message = new_text
 
         if (
             f"{str(chat_id)}.{func.__self__.__module__}" in blacklist_chats

@@ -102,7 +102,7 @@ class Gallery(InlineUnit):
             isinstance(caption, str)
             or isinstance(caption, list)
             and all(isinstance(item, str) for item in caption)
-        ) and not Callable(caption):
+        ) and not callable(caption):
             logger.error(
                 (
                     "Invalid type for `caption`. Expected `str` or `list` or"
@@ -225,7 +225,7 @@ class Gallery(InlineUnit):
             **({"ttl": round(time.time()) + ttl} if ttl else {}),
             **({"force_me": force_me} if force_me else {}),
             **({"disable_security": disable_security} if disable_security else {}),
-            **({"on_unload": on_unload} if Callable(on_unload) else {}),
+            **({"on_unload": on_unload} if callable(on_unload) else {}),
             **({"preload": preload} if preload else {}),
             **({"gif": gif} if gif else {}),
             **({"always_allow": always_allow} if always_allow else {}),
@@ -344,7 +344,7 @@ class Gallery(InlineUnit):
                 photo_url = callback[0]
             case _ if asyncio.iscoroutinefunction(callback):
                 photo_url = await callback()
-            case _ if Callable(callback):
+            case _ if callable(callback):
                 photo_url = callback()
             case _:
                 logger.error(
@@ -523,7 +523,13 @@ class Gallery(InlineUnit):
                 await self._gallery_slideshow(call, unit_id)
                 return
             case _ if page == "close":
-                await self._delete_unit_message(call, unit_id=unit_id)
+                deleted = await self._delete_unit_message(call, unit_id=unit_id)
+                try:
+                    await call.answer(
+                        "" if deleted else "Error occurred", show_alert=not deleted
+                    )
+                except Exception:
+                    pass
                 return
             case _ if page < 0:
                 await call.answer("No way back")
