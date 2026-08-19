@@ -37,6 +37,16 @@ class BrandingTest(unittest.TestCase):
         self.assertNotIn("Path(__file__)", source)
         self.assertIn("Path(version.__file__).resolve().parent.parent", source)
 
+    def test_startup_registers_core_before_enabling_updates(self):
+        main_source = Path("heroku/main.py").read_text()
+        loader_source = Path("heroku/loader.py").read_text()
+
+        self.assertIn("await modules.register_all(None, no_external=True)", main_source)
+        self.assertIn("modules.register_startup_commands()", main_source)
+        self.assertIn("await client.set_receive_updates(True)", main_source)
+        self.assertIn("def register_startup_commands", loader_source)
+        self.assertIn("def _event_loop_exception_handler", main_source)
+
     def test_log_formatter_rebrands_internal_package(self):
         formatter = RatkoFormatter("%(name)s: %(message)s")
         record = logging.LogRecord(

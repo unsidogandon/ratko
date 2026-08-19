@@ -27,6 +27,7 @@ import sqlite3
 import string
 import sys
 import tempfile
+import traceback
 import typing
 from getpass import getpass
 from pathlib import Path
@@ -538,6 +539,150 @@ def raise_auth():
     raise InteractiveAuthRequired()
 
 
+def _await_chain(coro, limit: int = 8) -> str:
+    chain = []
+    current = coro
+    seen = set()
+
+    while current is not None and len(chain) < limit:
+        marker = id(current)
+        if marker in seen:
+            break
+        seen.add(marker)
+
+        code = getattr(current, "cr_code", None) or getattr(current, "gi_code", None)
+        if code is not None:
+            chain.append(
+                f"{code.co_qualname} ({code.co_filename}:{code.co_firstlineno})"
+            )
+            awaited = getattr(current, "cr_await", None)
+            if awaited is None:
+                awaited = getattr(current, "gi_yieldfrom", None)
+            current = awaited
+            continue
+
+        if isinstance(current, asyncio.Future):
+            chain.append(f"{type(current).__name__}(done={current.done()})")
+            break
+
+        chain.append(type(current).__qualname__)
+        current = getattr(current, "cr_await", None)
+
+    return " -> ".join(chain) or "<unknown>"
+
+
+def _task_diagnostics(task) -> str:
+    if task is None:
+        return "task=<unavailable>"
+
+    try:
+        task_name = getattr(task, "_ratko_name", None) or task.get_name()
+    except Exception:
+        task_name = "<unnamed>"
+
+    try:
+        coro = task.get_coro()
+    except Exception:
+        coro = None
+
+    code = getattr(coro, "cr_code", None) or getattr(coro, "gi_code", None)
+    coro_name = code.co_qualname if code is not None else type(coro).__qualname__
+    state = (
+        "cancelled"
+        if task.cancelled()
+        else "done"
+        if task.done()
+        else "pending"
+    )
+    details = [
+        f"task={task_name!r}",
+        f"state={state}",
+        f"coro={coro_name}",
+        f"await={_await_chain(coro)}",
+    ]
+
+    try:
+        stack = task.get_stack(limit=8)
+    except Exception:
+        stack = []
+
+    if stack:
+        details.append(
+            "stack="
+            + " | ".join(
+                f"{frame.f_code.co_filename}:{frame.f_lineno}"
+                f" in {frame.f_code.co_name}"
+                for frame in stack
+            )
+        )
+
+    created_at = getattr(task, "_ratko_created_at", None)
+    if created_at:
+        details.append("created_at=" + " | ".join(created_at))
+
+    return "; ".join(details)
+
+
+def _event_loop_exception_handler(loop, context):
+    message = context.get("message", "Unhandled asyncio exception")
+    task = context.get("task") or context.get("future")
+    details = _task_diagnostics(task)
+
+    source_traceback = context.get("source_traceback")
+    if source_traceback is not None:
+        try:
+            source_lines = "".join(source_traceback.format()).strip().splitlines()
+            if source_lines:
+                details += "\nasyncio_created_at=" + " | ".join(source_lines[-6:])
+        except Exception:
+            pass
+
+    if not task and context.get("handle") is not None:
+        details += f"\nhandle={context['handle']!r}"
+
+    if not task:
+        extra = {
+            key: repr(value)[:512]
+            for key, value in context.items()
+            if key not in {"message", "exception", "task", "future", "handle"}
+        }
+        if extra:
+            details += f"\ncontext={extra!r}"
+
+    exception = context.get("exception")
+    if exception is not None:
+        logging.getLogger().error(
+            "Exception on event loop! %s\n%s",
+            message,
+            details,
+            exc_info=(type(exception), exception, exception.__traceback__),
+        )
+        return
+
+    logging.getLogger().error("Exception on event loop! %s\n%s", message, details)
+
+
+def _task_factory(loop, coro, **kwargs):
+    task = asyncio.Task(coro, loop=loop, **kwargs)
+
+    try:
+        code = getattr(coro, "cr_code", None) or getattr(coro, "gi_code", None)
+        task_name = task.get_name()
+        if code and (not task_name or str(task_name).startswith("Task-")):
+            task._ratko_name = f"ratko:{code.co_qualname}"
+            task.set_name(task._ratko_name)
+
+        origin = traceback.extract_stack(limit=5)
+        task._ratko_created_at = [
+            f"{frame.filename}:{frame.lineno} in {frame.name}"
+            for frame in origin[-3:-1]
+        ]
+    except Exception:
+        pass
+
+    return task
+
+
 class Heroku:
     """Main userbot instance, which can handle multiple clients"""
 
@@ -563,9 +708,13 @@ class Heroku:
             self.loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self.loop)
 
+        self.loop.set_task_factory(_task_factory)
+        self.loop.set_exception_handler(_event_loop_exception_handler)
+
         self.clients = SuperList()
         self.ready = asyncio.Event()
         self._session_init_blocked = False
+        self._shutdown_started = False
         self._migrate_sessions()
         self._read_sessions()
         self._get_api_token()
@@ -890,6 +1039,8 @@ class Heroku:
             connection=self.conn,
             proxy=self.proxy,
             connection_retries=None,
+            receive_updates=False,
+            catch_up=False,
             device_model=get_app_name(),
             system_version=generate_random_system_version(),
             app_version=".".join(map(str, __version__)) + " x64",
@@ -1023,6 +1174,8 @@ class Heroku:
                     connection=self.conn,
                     proxy=self.proxy,
                     connection_retries=None,
+                    receive_updates=False,
+                    catch_up=False,
                     device_model=get_app_name(),
                     system_version=generate_random_system_version(),
                     app_version=".".join(map(str, __version__)) + " x64",
@@ -1244,29 +1397,63 @@ class Heroku:
         if progress is not None:
             progress.stage("dispatcher ready", advance=True, stage="Dispatcher")
 
-        await modules.register_all(None)
+        # Register core commands before restoring external modules in the background.
+        await modules.register_all(None, no_external=True)
         modules.send_config()
+        modules.register_startup_commands()
         if progress is not None:
             progress.stage("configuration sent", advance=True, stage="Config")
-        await modules.inline.register_manager()
-        if progress is not None:
-            progress.stage("inline manager ready", advance=True, stage="Inline")
-        await db.ensure_content_channel()
-        if progress is not None:
-            progress.stage("content channel linked", advance=True, stage="Assets")
-        await modules.send_ready()
-        if progress is not None:
-            progress.stage("modules initialized", advance=True, stage="Ready")
 
-        if first:
-            await self._badge(client)
-
+        await client.set_receive_updates(True)
         if progress is not None:
-            progress.finalize()
-            modules.startup_progress = None
-            print("все ратко запустилось")
+            progress.stage("updates enabled", advance=True, stage="Updates")
 
-        await client.run_until_disconnected()
+        async def finish_startup():
+            try:
+                try:
+                    await modules.inline.register_manager()
+                    if progress is not None:
+                        progress.stage(
+                            "inline manager ready",
+                            advance=True,
+                            stage="Inline",
+                        )
+                except Exception:
+                    logging.exception("Failed to initialize inline manager")
+
+                try:
+                    await db.ensure_content_channel()
+                    if progress is not None:
+                        progress.stage(
+                            "content channel linked",
+                            advance=True,
+                            stage="Assets",
+                        )
+                except Exception:
+                    logging.exception("Failed to initialize content channel")
+
+                await modules.send_ready()
+                if progress is not None:
+                    progress.stage("modules initialized", advance=True, stage="Ready")
+
+                if first:
+                    await self._badge(client)
+            except Exception:
+                logging.exception("Background startup initialization failed")
+            finally:
+                if progress is not None:
+                    progress.finalize()
+                    modules.startup_progress = None
+                    print("все ратко запустилось")
+
+        startup_task = self.loop.create_task(finish_startup())
+        try:
+            await client.run_until_disconnected()
+        finally:
+            if not startup_task.done():
+                startup_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await startup_task
 
     async def _main(self):
         """Main entrypoint"""
@@ -1290,13 +1477,7 @@ class Heroku:
             if not initialized:
                 return
 
-        self.loop.set_exception_handler(
-            lambda _, x: logging.error(
-                "Exception on event loop! %s",
-                x["message"],
-                exc_info=x.get("exception", None),
-            )
-        )
+        self.loop.set_exception_handler(_event_loop_exception_handler)
 
         if self.arguments.tty:
             sys.stdout.write(
@@ -1316,6 +1497,10 @@ class Heroku:
         await asyncio.gather(*[self.amain_wrapper(client) for client in self.clients])
 
     async def _shutdown_handler(self):
+        if self._shutdown_started:
+            return
+
+        self._shutdown_started = True
         self.startup_live.stop()
         for client in self.clients:
             inline = getattr(getattr(client, "loader", None), "inline", None)
@@ -1325,10 +1510,16 @@ class Heroku:
                 except Exception:
                     logging.exception("Failed to stop inline manager")
         for c in self.clients:
-            await c.disconnect()
-        for task in asyncio.all_tasks():
-            if task is not asyncio.current_task():
-                task.cancel()
+            with contextlib.suppress(Exception):
+                await c.disconnect()
+
+        current = asyncio.current_task()
+        tasks = [task for task in asyncio.all_tasks() if task is not current]
+        for task in tasks:
+            task.cancel()
+
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     def main(self):
         """Main entrypoint"""
