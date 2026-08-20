@@ -661,20 +661,6 @@ class Modules:
 
         return loaded
 
-    async def register_external(self) -> list[Module]:
-        """Restore saved file modules after core commands are available."""
-        if self.secure_boot:
-            return []
-
-        external_mods = [
-            Path(mod).resolve()
-            for mod in _iter_module_files(
-                LOADED_MODULES_DIR,
-                include=lambda name: name.endswith(f"{self.client.tg_id}.py"),
-            )
-        ]
-        return await self._register_modules(external_mods, "<file>")
-
     async def _register_modules(
         self,
         modules: list,
@@ -686,7 +672,6 @@ class Modules:
         loaded = []
 
         for mod in modules:
-            await asyncio.sleep(0)
             try:
                 mod_shortname = os.path.basename(mod).rsplit(".py", maxsplit=1)[0]
                 module_name = f"{__package__}.{MODULES_NAME}.{mod_shortname}"
@@ -862,13 +847,6 @@ class Modules:
                     update_type,
                 )
 
-    def register_startup_commands(self, modules: list[Module] | None = None):
-        """Register commands before module client-ready hooks run."""
-        instances = self.modules.copy() if modules is None else modules
-        for instance in instances:
-            self.unregister_commands(instance, "startup")
-            self.register_commands(instance)
-
     def unregister_bot_update_handlers(self, instance: Module, purpose: str):
         """Unregister bot update handlers for a module"""
         for name, handler in utils.iter_attrs(instance):
@@ -884,14 +862,6 @@ class Modules:
                     purpose,
                 )
 
-    def unregister_handlers(self, instance: Module, purpose: str):
-        """Remove every dispatcher registration belonging to a module."""
-        self.unregister_commands(instance, purpose)
-        self.unregister_watchers(instance, purpose)
-        self.unregister_raw_handlers(instance, purpose)
-        self.unregister_bot_update_handlers(instance, purpose)
-        self.unregister_inline_stuff(instance, purpose)
-
     @property
     def _remove_core_protection(self) -> bool:
         from . import main
@@ -904,11 +874,9 @@ class Modules:
             _heroku_client_id_logging_tag = copy.copy(self.client.tg_id)  # noqa: F841
 
         if instance.__origin__.startswith("<core"):
-            self._core_commands += [
-                command
-                for command in map(str.lower, instance.heroku_commands)
-                if command not in self._core_commands
-            ]
+            self._core_commands += list(
+                map(lambda x: x.lower(), list(instance.heroku_commands))
+            )
 
         for _command, cmd in instance.heroku_commands.items():
             # Restrict overwriting core modules' commands
@@ -1284,7 +1252,6 @@ class Modules:
                 raise e
 
             logger.debug("Unloading %s, because it raised SelfUnload", mod)
-            self.unregister_handlers(mod, "self-unload")
             self.modules.remove(mod)
             return
         except SelfSuspend as e:
@@ -1292,7 +1259,6 @@ class Modules:
                 raise e
 
             logger.debug("Suspending %s, because it raised SelfSuspend", mod)
-            self.unregister_handlers(mod, "self-suspend")
             return
         except Exception as e:
             logger.exception(
@@ -1303,7 +1269,6 @@ class Modules:
                 mod,
                 e,
             )
-            self.unregister_handlers(mod, "init-error")
             self.modules.remove(mod)
             raise
 

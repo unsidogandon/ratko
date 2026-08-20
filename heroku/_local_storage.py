@@ -162,7 +162,6 @@ class RemoteStorage:
                 requests.get,
                 url,
                 auth=(tuple(auth.split(":", 1)) if auth else None),
-                timeout=(10, 30),
                 headers={
                     "User-Agent": "Ratko Userbot",
                     "X-Heroku-Version": ".".join(map(str, __version__)),

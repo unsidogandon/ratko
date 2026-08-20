@@ -271,8 +271,7 @@ class InlineManager(
             ),
             self._client.api_id,
             self._client.api_hash,
-            receive_updates=False,
-            catch_up=False,
+            receive_updates=True,
         )
 
         try:
@@ -280,7 +279,6 @@ class InlineManager(
             self.bot = TelethonBot(self._bot_client, self._client)
             self._bot = self.bot
             self._register_builtin_handlers()
-            await self._bot_client.set_receive_updates(True)
             bot_me = await self._bot_client.get_me()
             self.bot_username = bot_me.username
             self.bot_id = bot_me.id

@@ -1039,8 +1039,6 @@ class Heroku:
             connection=self.conn,
             proxy=self.proxy,
             connection_retries=None,
-            receive_updates=False,
-            catch_up=False,
             device_model=get_app_name(),
             system_version=generate_random_system_version(),
             app_version=".".join(map(str, __version__)) + " x64",
@@ -1174,8 +1172,6 @@ class Heroku:
                     connection=self.conn,
                     proxy=self.proxy,
                     connection_retries=None,
-                    receive_updates=False,
-                    catch_up=False,
                     device_model=get_app_name(),
                     system_version=generate_random_system_version(),
                     app_version=".".join(map(str, __version__)) + " x64",
@@ -1397,69 +1393,29 @@ class Heroku:
         if progress is not None:
             progress.stage("dispatcher ready", advance=True, stage="Dispatcher")
 
-        # Register core commands before restoring external modules in the background.
-        await modules.register_all(None, no_external=True)
+        await modules.register_all(None)
         modules.send_config()
-        modules.register_startup_commands()
         if progress is not None:
             progress.stage("configuration sent", advance=True, stage="Config")
-
-        await client.set_receive_updates(True)
+        await modules.inline.register_manager()
         if progress is not None:
-            progress.stage("updates enabled", advance=True, stage="Updates")
+            progress.stage("inline manager ready", advance=True, stage="Inline")
+        await db.ensure_content_channel()
+        if progress is not None:
+            progress.stage("content channel linked", advance=True, stage="Assets")
+        await modules.send_ready()
+        if progress is not None:
+            progress.stage("modules initialized", advance=True, stage="Ready")
 
-        async def finish_startup():
-            try:
-                try:
-                    await modules.inline.register_manager()
-                    if progress is not None:
-                        progress.stage(
-                            "inline manager ready",
-                            advance=True,
-                            stage="Inline",
-                        )
-                except Exception:
-                    logging.exception("Failed to initialize inline manager")
+        if first:
+            await self._badge(client)
 
-                try:
-                    await db.ensure_content_channel()
-                    if progress is not None:
-                        progress.stage(
-                            "content channel linked",
-                            advance=True,
-                            stage="Assets",
-                        )
-                except Exception:
-                    logging.exception("Failed to initialize content channel")
+        if progress is not None:
+            progress.finalize()
+            modules.startup_progress = None
+            print("все ратко запустилось")
 
-                await modules.send_ready()
-                loader_module = modules.lookup("LoaderMod")
-                loader_task = getattr(loader_module, "_update_modules_task", None)
-                if loader_task is not None:
-                    await loader_task
-                elif loader_module and not loader_module.fully_loaded:
-                    await loader_module._update_modules()
-                if progress is not None:
-                    progress.stage("modules initialized", advance=True, stage="Ready")
-
-                if first:
-                    await self._badge(client)
-            except Exception:
-                logging.exception("Background startup initialization failed")
-            finally:
-                if progress is not None:
-                    progress.finalize()
-                    modules.startup_progress = None
-                    print("все ратко запустилось")
-
-        startup_task = self.loop.create_task(finish_startup())
-        try:
-            await client.run_until_disconnected()
-        finally:
-            if not startup_task.done():
-                startup_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await startup_task
+        await client.run_until_disconnected()
 
     async def _main(self):
         """Main entrypoint"""
