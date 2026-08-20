@@ -661,6 +661,20 @@ class Modules:
 
         return loaded
 
+    async def register_external(self) -> list[Module]:
+        """Restore saved file modules after core commands are available."""
+        if self.secure_boot:
+            return []
+
+        external_mods = [
+            Path(mod).resolve()
+            for mod in _iter_module_files(
+                LOADED_MODULES_DIR,
+                include=lambda name: name.endswith(f"{self.client.tg_id}.py"),
+            )
+        ]
+        return await self._register_modules(external_mods, "<file>")
+
     async def _register_modules(
         self,
         modules: list,
@@ -672,6 +686,7 @@ class Modules:
         loaded = []
 
         for mod in modules:
+            await asyncio.sleep(0)
             try:
                 mod_shortname = os.path.basename(mod).rsplit(".py", maxsplit=1)[0]
                 module_name = f"{__package__}.{MODULES_NAME}.{mod_shortname}"

@@ -48,6 +48,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MODULES_REPO = "https://raw.githubusercontent.com/unsidogandon/ratko/main"
 LEGACY_MODULES_REPO = "https://raw.githubusercontent.com/coddrago/modules/main"
+MODULE_RESTORE_TIMEOUT = 60
 
 
 class FakeOne:
@@ -142,7 +143,9 @@ class LoaderMod(loader.Module):
 
         main.heroku.ready.set()
 
-        asyncio.ensure_future(self._update_modules())
+        update_task = getattr(self, "_update_modules_task", None)
+        if update_task is None or update_task.done():
+            self._update_modules_task = asyncio.ensure_future(self._update_modules())
         asyncio.ensure_future(self._async_init())
 
     @loader.loop(interval=3, wait_before=True, autostart=True)
@@ -345,6 +348,7 @@ class LoaderMod(loader.Module):
         res = await utils.run_sync(
             requests.get,
             f"{repo}/full.txt",
+            timeout=(10, 30),
             auth=(
                 tuple(self.config["basic_auth"].split(":", 1))
                 if self.config["basic_auth"]
@@ -990,12 +994,16 @@ class LoaderMod(loader.Module):
                         await asyncio.sleep(0.1)
 
                 task = asyncio.ensure_future(inner_proxy())
-                await self.allmodules.send_ready_one(
-                    instance,
-                    no_self_unload=True,
-                    from_dlmod=bool(message),
-                )
-                task.cancel()
+                try:
+                    await self.allmodules.send_ready_one(
+                        instance,
+                        no_self_unload=True,
+                        from_dlmod=bool(message),
+                    )
+                finally:
+                    task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await task
             except CoreOverwriteError as e:
                 logger.error(
                     "Module %s tried to overwrite core %s %s during ready stage",
@@ -1615,31 +1623,128 @@ class LoaderMod(loader.Module):
         await self.lookup("Updater").restart_common(call)
 
     async def _update_modules(self):
-        todo = await self._get_modules_to_load()
-
+        todo = dict(await self._get_modules_to_load())
         self._secure_boot = False
+        failed_modules = {}
 
-        if self._db.get(loader.__name__, "secure_boot", False):
-            self._db.set(loader.__name__, "secure_boot", False)
-            self._secure_boot = True
-        else:
-            for mod in todo.values():
-                await self.download_and_install(mod)
+        async def unload_origin(origin: str):
+            for instance in self.allmodules.modules.copy():
+                if getattr(instance, "__origin__", None) == origin:
+                    with contextlib.suppress(Exception):
+                        await self.allmodules.unload_module(
+                            instance.__class__.__name__
+                        )
 
-            self.update_modules_in_db()
+        async def restore_file_module(instance):
+            try:
+                self.allmodules.send_config_one(instance)
+                await asyncio.wait_for(
+                    self.allmodules.send_ready_one(
+                        instance,
+                        no_self_unload=True,
+                    ),
+                    timeout=MODULE_RESTORE_TIMEOUT,
+                )
+            except asyncio.TimeoutError:
+                logger.error(
+                    "Timed out restoring file module %s after %ss",
+                    instance.__class__.__name__,
+                    MODULE_RESTORE_TIMEOUT,
+                )
+                with contextlib.suppress(Exception):
+                    await self.allmodules.unload_module(
+                        instance.__class__.__name__
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to restore file module %s",
+                    instance.__class__.__name__,
+                )
+                with contextlib.suppress(Exception):
+                    await self.allmodules.unload_module(
+                        instance.__class__.__name__
+                    )
 
-            aliases = {
-                alias: cmd
-                for alias, cmd in self.lookup("settings").get("aliases", {}).items()
-                if self.allmodules.add_alias(alias, *cmd.split(maxsplit=1))
-            }
+        try:
+            if self._db.get(loader.__name__, "secure_boot", False):
+                self._db.set(loader.__name__, "secure_boot", False)
+                self._secure_boot = True
+                return
 
-            self.lookup("settings").set("aliases", aliases)
+            file_modules = await self.allmodules.register_external()
+            logger.info(
+                "Restoring %s file modules and %s saved external modules",
+                len(file_modules),
+                len(todo),
+            )
+            for instance in file_modules:
+                await restore_file_module(instance)
 
-        self.fully_loaded = True
+            for module_name, module_url in todo.items():
+                try:
+                    result = await asyncio.wait_for(
+                        self.download_and_install(module_url),
+                        timeout=MODULE_RESTORE_TIMEOUT,
+                    )
+                    if result != MODULE_LOADING_SUCCESS:
+                        logger.error(
+                            "Failed to restore external module %s from %s",
+                            module_name,
+                            module_url,
+                        )
+                        failed_modules[module_name] = module_url
+                        await unload_origin(module_url)
+                except asyncio.TimeoutError:
+                    logger.error(
+                        "Timed out restoring external module %s from %s after %ss",
+                        module_name,
+                        module_url,
+                        MODULE_RESTORE_TIMEOUT,
+                    )
+                    failed_modules[module_name] = module_url
+                    await unload_origin(module_url)
+                except Exception:
+                    logger.exception(
+                        "Failed to restore external module %s from %s",
+                        module_name,
+                        module_url,
+                    )
+                    failed_modules[module_name] = module_url
+                    await unload_origin(module_url)
+        except Exception:
+            logger.exception("Failed while restoring external modules")
+        finally:
+            if not self._secure_boot:
+                self.update_modules_in_db()
+                if failed_modules:
+                    self.set(
+                        "loaded_modules",
+                        {
+                            **self.get("loaded_modules", {}),
+                            **failed_modules,
+                        },
+                    )
 
-        with contextlib.suppress(AttributeError):
-            await self.lookup("Updater").full_restart_complete(self._secure_boot)
+            logger.info(
+                "External module restore finished: %s loaded, %s failed",
+                sum(
+                    getattr(module, "__origin__", "").startswith(("http", "<file"))
+                    for module in self.allmodules.modules
+                ),
+                len(failed_modules),
+            )
+
+            for alias, cmd in self.lookup("settings").get("aliases", {}).items():
+                self.allmodules.add_alias(alias, *cmd.split(maxsplit=1))
+
+            self.fully_loaded = True
+
+            try:
+                updater = self.lookup("Updater")
+                if updater:
+                    await updater.full_restart_complete(self._secure_boot)
+            except Exception:
+                logger.exception("Failed to report external module restore completion")
 
     def flush_cache(self) -> int:
         """Flush the cache of links to modules"""

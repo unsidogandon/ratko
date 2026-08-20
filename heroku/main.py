@@ -1433,6 +1433,12 @@ class Heroku:
                     logging.exception("Failed to initialize content channel")
 
                 await modules.send_ready()
+                loader_module = modules.lookup("LoaderMod")
+                loader_task = getattr(loader_module, "_update_modules_task", None)
+                if loader_task is not None:
+                    await loader_task
+                elif loader_module and not loader_module.fully_loaded:
+                    await loader_module._update_modules()
                 if progress is not None:
                     progress.stage("modules initialized", advance=True, stage="Ready")
 
