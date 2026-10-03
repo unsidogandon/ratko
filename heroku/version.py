@@ -14,7 +14,7 @@
 
 # Ratko modifications, 2026
 
-__version__ = (7, 7, 7)
+__version__ = (6, 6, 6)
 
 PROJECT_NAME = "Ratko"
 REPO_URL = "https://github.com/unsidogandon/ratko"
