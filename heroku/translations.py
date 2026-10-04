@@ -34,6 +34,7 @@ SUPPORTED_LANGUAGES = {
     "pz": "🇺🇦 потужні",
     "de": "🇩🇪 Deutsch",
     "ja": "🇯🇵 日本語",
+    "unsido": "🏴‍☠️ Unsido",
 }
 LANGUAGE_ALIASES = {
     "ua": "uk",
