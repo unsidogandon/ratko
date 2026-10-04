@@ -208,6 +208,7 @@ class Translations(loader.Module):
             "jp": "🇯🇵",
             "fr": "🇫🇷",
             "uz": "🇺🇿",
+            "unsido": "🏴‍☠️",
         }
 
         for meme in translations.MEME_LANGUAGES.keys():
@@ -222,7 +223,12 @@ class Translations(loader.Module):
             await self._choose_language(message=message)
             return
 
-        if any(len(i) != 2 and not utils.check_url(i) for i in args.split()):
+        if any(
+            len(i) != 2
+            and i not in translations.SUPPORTED_LANGUAGES
+            and not utils.check_url(i)
+            for i in args.split()
+        ):
             await utils.answer(message, self.strings["incorrect_language"])
             return
 
