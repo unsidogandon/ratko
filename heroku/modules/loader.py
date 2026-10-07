@@ -120,16 +120,6 @@ class LoaderMod(loader.Module):
             ),
         )
 
-    async def _async_init(self):
-        modules = utils.array_sum(
-            map(
-                lambda x: list(x.values()),
-                (await self.get_repo_list()).values(),
-            )
-        )
-        logger.debug("Modules: %s", modules)
-        asyncio.ensure_future(self._storage.preload(modules))
-
     async def client_ready(self):
         if self.config["MODULES_REPO"].rstrip("/") == LEGACY_MODULES_REPO:
             self.config["MODULES_REPO"] = DEFAULT_MODULES_REPO
@@ -144,7 +134,6 @@ class LoaderMod(loader.Module):
         main.heroku.ready.set()
 
         asyncio.ensure_future(self._update_modules())
-        asyncio.ensure_future(self._async_init())
 
     @loader.loop(interval=3, wait_before=True, autostart=True)
     async def _config_autosaver(self):
