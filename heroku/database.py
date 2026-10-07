@@ -347,13 +347,13 @@ class Database(dict):
     def save(self) -> bool:
         """Save database"""
         try:
-            data = json.dumps(self, indent=4)
+            data = json.dumps(self)
         except (TypeError, ValueError):
             if not self.process_db_autofix(self):
                 self._restore_revision()
 
             try:
-                data = json.dumps(self, indent=4)
+                data = json.dumps(self)
             except (TypeError, ValueError):
                 self._restore_revision()
 
