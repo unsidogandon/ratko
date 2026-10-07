@@ -84,7 +84,8 @@ class Database(dict):
         super().__init__()
         self._client: CustomTelegramClient = client
         self._next_revision_call: int = 0
-        self._revisions: list[dict] = []
+        self._revisions: list[str] = []
+        self._save_scheduled: bool = False
         self._me: User = None
         self._redis: typing.Any = None
         self._saving_task: asyncio.Future = None
@@ -345,30 +346,22 @@ class Database(dict):
 
     def save(self) -> bool:
         """Save database"""
-        if not self.process_db_autofix(self):
+        try:
+            data = json.dumps(self, indent=4)
+        except (TypeError, ValueError):
+            if not self.process_db_autofix(self):
+                self._restore_revision()
+
             try:
-                rev = self._revisions.pop()
-                while not self.process_db_autofix(rev):
-                    rev = self._revisions.pop()
-            except IndexError:
-                raise RuntimeError(
-                    "Can't find revision to restore broken database from "
-                    "database is most likely broken and will lead to problems, "
-                    "so its save is forbidden."
-                )
-
-            self.clear()
-            self.update(**rev)
-
-            raise RuntimeError(
-                "Rewriting database to the last revision because new one destructed it"
-            )
+                data = json.dumps(self, indent=4)
+            except (TypeError, ValueError):
+                self._restore_revision()
 
         if self._next_revision_call < time.time():
-            self._revisions += [copy.deepcopy(dict(self))]
+            self._revisions += [data]
             self._next_revision_call = time.time() + 3
 
-        while len(self._revisions) > 15:
+        while len(self._revisions) > 5:
             self._revisions.pop(0)
 
         if self._redis:
@@ -377,12 +370,56 @@ class Database(dict):
             return True
 
         try:
-            main._atomic_write_text(self._db_file, json.dumps(self, indent=4))
+            main._atomic_write_text(self._db_file, data)
         except Exception:
             logger.exception("Database save failed!")
             return False
 
         return True
+
+    def _restore_revision(self) -> typing.NoReturn:
+        """Restore the last healthy revision of the database"""
+        try:
+            rev = json.loads(self._revisions.pop())
+            while not self.process_db_autofix(rev):
+                rev = json.loads(self._revisions.pop())
+        except IndexError:
+            raise RuntimeError(
+                "Can't find revision to restore broken database from "
+                "database is most likely broken and will lead to problems, "
+                "so its save is forbidden."
+            )
+
+        self.clear()
+        self.update(**rev)
+
+        raise RuntimeError(
+            "Rewriting database to the last revision because new one destructed it"
+        )
+
+    def _schedule_save(self) -> bool:
+        """
+        Debounced database save. Coalesces rapid writes (e.g. the config
+        autosaver storm) into a single flush instead of serializing the
+        whole database on every set
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return self.save()
+
+        if not self._save_scheduled:
+            self._save_scheduled = True
+            loop.call_later(0.5, self._flush)
+
+        return True
+
+    def _flush(self):
+        self._save_scheduled = False
+        try:
+            self.save()
+        except Exception:
+            logger.exception("Deferred database save failed")
 
     async def store_asset(self, message: Message) -> int:
         """
@@ -485,7 +522,7 @@ class Database(dict):
             )
 
         super().setdefault(owner, {})[key] = value
-        return self.save()
+        return self._schedule_save()
 
     def __setitem__(self, owner: str, value: JSONSerializable) -> None:
         if not utils.is_serializable(owner):

@@ -113,9 +113,14 @@ class RemoteStorage:
         self._client = client
 
     async def preload(self, urls: list[str]):
-        """Preloads modules from remote storage."""
+        """Preloads modules from remote storage, skipping the cached ones."""
         logger.debug("Preloading modules from remote storage.")
         for url in urls:
+            _, repo, module_name = self._parse_url(url)
+
+            if self._local_storage.fetch(repo, module_name) is not None:
+                continue
+
             logger.debug("Preloading module %s", url)
 
             with contextlib.suppress(Exception):
