@@ -29,7 +29,6 @@ import typing
 from dataclasses import dataclass, field
 from importlib.abc import SourceLoader
 
-import requests
 from herokutl.hints import EntityLike
 from herokutl.tl.functions.account import UpdateNotifySettingsRequest
 from herokutl.tl.types import (
@@ -42,6 +41,7 @@ from herokutl.tl.types import (
 )
 
 from . import version
+from ._internal import fetch_text
 from ._reference_finder import replace_all_refs
 from .inline.types import (
     BotInlineCall,
@@ -486,9 +486,7 @@ class Module:
         if not utils.check_url(url):
             _raise(ValueError("Invalid url for library"))
 
-        code = await utils.run_sync(requests.get, url)
-        code.raise_for_status()
-        code = code.text
+        code = await utils.run_sync(fetch_text, url)
 
         if re.search(r"# ?scope: ?heroku_min", code):
             ver = tuple(

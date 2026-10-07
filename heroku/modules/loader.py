@@ -40,6 +40,7 @@ from herokutl.tl.functions.channels import JoinChannelRequest
 from herokutl.tl.types import Channel, InputMediaWebPage
 
 from .. import loader, main, utils
+from .._internal import fetch_text
 from .._local_storage import RemoteStorage
 from ..inline.types import InlineCall
 from ..types import CoreOverwriteError, CoreUnloadError
@@ -342,21 +343,18 @@ class LoaderMod(loader.Module):
         if self._links_cache.get(repo, {}).get("exp", 0) >= time.time():
             return self._links_cache[repo]["data"]
 
-        res = await utils.run_sync(
-            requests.get,
-            f"{repo}/full.txt",
-            auth=(
-                tuple(self.config["basic_auth"].split(":", 1))
-                if self.config["basic_auth"]
-                else None
-            ),
-        )
-
-        if not str(res.status_code).startswith("2"):
+        try:
+            content = await utils.run_sync(
+                fetch_text,
+                f"{repo}/full.txt",
+                auth=self.config["basic_auth"],
+                trusted_url=self.config["MODULES_REPO"],
+            )
+        except Exception:
             logger.debug(
-                "Can't load repo %s contents because of %s status code",
+                "Can't load repo %s contents",
                 repo,
-                res.status_code,
+                exc_info=True,
             )
             return []
 
@@ -364,7 +362,7 @@ class LoaderMod(loader.Module):
             "exp": time.time() + 5 * 60,
             "data": [
                 link.strip()
-                for link in res.text.splitlines()
+                for link in content.splitlines()
                 if link.strip() and not link.lstrip().startswith("#")
             ],
         }
@@ -438,7 +436,11 @@ class LoaderMod(loader.Module):
                 )
 
             try:
-                r = await self._storage.fetch(url, auth=self.config["basic_auth"])
+                r = await self._storage.fetch(
+                    url,
+                    auth=self.config["basic_auth"],
+                    trusted_url=self.config["MODULES_REPO"],
+                )
             except requests.exceptions.HTTPError as e:
                 logger.warning(
                     "Failed to download module %s from %s: %s",
@@ -1561,17 +1563,13 @@ class LoaderMod(loader.Module):
             args = f"https://{args}"
 
         try:
-            r = await utils.run_sync(
-                requests.get,
+            content = await utils.run_sync(
+                fetch_text,
                 f"{args}/full.txt",
-                auth=(
-                    tuple(self.config["basic_auth"].split(":", 1))
-                    if self.config["basic_auth"]
-                    else None
-                ),
+                auth=self.config["basic_auth"],
+                trusted_url=self.config["MODULES_REPO"],
             )
-            r.raise_for_status()
-            if not r.text.strip():
+            if not content.strip():
                 raise ValueError
         except Exception:
             await utils.answer(message, self.strings["no_repo"])
