@@ -12,6 +12,7 @@
 
 import asyncio
 import atexit
+import contextlib
 import logging
 import os
 import random
@@ -19,6 +20,22 @@ import signal
 import sys
 from collections.abc import Callable
 from urllib.parse import unquote, urljoin, urlsplit
+
+
+_exit_flushers: list[Callable] = []
+
+
+def register_exit_flusher(flusher: Callable) -> None:
+    """Register a sync callback, which is run before process replacement"""
+    if flusher not in _exit_flushers:
+        _exit_flushers.append(flusher)
+
+
+def run_exit_flushers() -> None:
+    """Flush pending state before the process is replaced or terminated"""
+    for flusher in _exit_flushers.copy():
+        with contextlib.suppress(Exception):
+            flusher()
 
 
 def validate_url(url):
@@ -114,6 +131,8 @@ def get_startup_callback() -> Callable:
 
 def die():
     """Platform-dependent way to kill the current process group"""
+    run_exit_flushers()
+
     match True:
         case _ if "DOCKER" in os.environ:
             sys.exit(0)
@@ -124,6 +143,8 @@ def die():
 
 
 def restart():
+    run_exit_flushers()
+
     if "--sandbox" in " ".join(sys.argv):
         exit(0)
 

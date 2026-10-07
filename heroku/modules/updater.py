@@ -951,15 +951,21 @@ class UpdaterMod(loader.Module):
 
         if legacy_message_ref := self._parse_legacy_update_message_ref(ms):
             chat_id, message_id = legacy_message_ref
-            await self._client.edit_message(chat_id, message_id, msg)
-            await asyncio.sleep(60)
-            await self._client.delete_messages(chat_id, message_id)
+            try:
+                await self._client.edit_message(chat_id, message_id, msg)
+                await asyncio.sleep(60)
+                await self._client.delete_messages(chat_id, message_id)
+            except Exception:
+                logger.warning("Failed to finalize restart message", exc_info=True)
             return
 
-        await self.inline.bot.edit_message_text(
-            inline_message_id=self._deserialize_inline_message_id(str(ms)),
-            text=self.inline.sanitise_text(msg),
-        )
+        try:
+            await self.inline.bot.edit_message_text(
+                inline_message_id=self._deserialize_inline_message_id(str(ms)),
+                text=self.inline.sanitise_text(msg),
+            )
+        except Exception:
+            logger.warning("Failed to finalize inline restart message", exc_info=True)
 
     @loader.command()
     async def rollback(self, message: Message):

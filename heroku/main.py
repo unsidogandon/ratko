@@ -56,7 +56,7 @@ from herokutl.tl.functions.auth import CheckPasswordRequest
 from herokutl.tl.functions.contacts import UnblockRequest
 
 from . import database, loader, utils, version
-from ._internal import print_banner, restart
+from ._internal import print_banner, restart, run_exit_flushers
 from .dispatcher import CommandDispatcher
 from .logo import build_startup_logo
 from .progresslive import StartupLiveDisplay
@@ -1467,6 +1467,7 @@ class Heroku:
             return
 
         self._shutdown_started = True
+        run_exit_flushers()
         self.startup_live.stop()
         for client in self.clients:
             inline = getattr(getattr(client, "loader", None), "inline", None)
@@ -1493,6 +1494,9 @@ class Heroku:
             try:
                 self.loop.add_signal_handler(
                     signal.SIGINT, lambda: asyncio.create_task(self._shutdown_handler())
+                )
+                self.loop.add_signal_handler(
+                    signal.SIGTERM, lambda: asyncio.create_task(self._shutdown_handler())
                 )
             except NotImplementedError:
                 logging.warning("Signal handlers not supported on this platform.")

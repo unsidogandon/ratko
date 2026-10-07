@@ -29,6 +29,7 @@ from herokutl.tl.functions.channels import EditTitleRequest
 from herokutl.tl.types import Message, User
 
 from . import main, utils
+from ._internal import register_exit_flusher
 from .pointers import (
     BaseSerializingMiddlewareDict,
     BaseSerializingMiddlewareList,
@@ -89,6 +90,8 @@ class Database(dict):
         self._me: User = None
         self._redis: typing.Any = None
         self._saving_task: asyncio.Future = None
+
+        register_exit_flusher(self._flush_pending)
 
     def __repr__(self):
         return object.__repr__(self)
@@ -420,6 +423,11 @@ class Database(dict):
             self.save()
         except Exception:
             logger.exception("Deferred database save failed")
+
+    def _flush_pending(self) -> None:
+        """Write pending debounced changes to disk immediately (on restart)"""
+        if self._save_scheduled:
+            self._flush()
 
     async def store_asset(self, message: Message) -> int:
         """
