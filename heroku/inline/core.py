@@ -16,6 +16,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import sqlite3
 import time
 import typing
 
@@ -182,7 +183,7 @@ class InlineManager(
         while True:
             for unit_id, unit in self._units.copy().items():
                 if (unit.get("ttl") or (time.time() + self._markup_ttl)) < time.time():
-                    del self._units[unit_id]
+                    await self._unload_unit(unit_id)
 
             await asyncio.sleep(5)
 
@@ -300,6 +301,13 @@ class InlineManager(
                 "Inline bot authorization flood wait: %ss. "
                 "Inline manager initialization skipped for this run.",
                 e.seconds,
+            )
+            self.init_complete = False
+            return False
+        except sqlite3.OperationalError:
+            logger.critical(
+                "Bot session database is locked, could not start bot client",
+                exc_info=True,
             )
             self.init_complete = False
             return False
@@ -484,7 +492,12 @@ class InlineManager(
         handler, event_builder = handler_ref
         self._bot_client.remove_event_handler(handler, event_builder)
 
-    async def _invoke_unit(self, unit_id: str, message: Message) -> Message:
+    async def _invoke_unit(
+        self,
+        unit_id: str,
+        message: Message,
+        reply_to: Message | int | None = None,
+    ) -> Message:
         event = asyncio.Event()
         self._error_events[unit_id] = event
 
@@ -493,12 +506,18 @@ class InlineManager(
 
         async def result_getter():
             nonlocal unit_id, q
-            with contextlib.suppress(Exception):
+            try:
                 q = await self._client.inline_query(self.bot_username, unit_id)
+            except Exception:
+                logger.exception("Inline query for unit %s failed", unit_id)
 
         async def event_poller():
             nonlocal exception
-            await asyncio.wait_for(event.wait(), timeout=10)
+            try:
+                await asyncio.wait_for(event.wait(), timeout=10)
+            except asyncio.TimeoutError:
+                logger.debug("Inline query for unit %s timed out after 10s", unit_id)
+                return
             if self._error_events.get(unit_id):
                 exception = self._error_events[unit_id]
 
@@ -524,6 +543,10 @@ class InlineManager(
         return await q[0].click(
             utils.get_chat_id(message) if isinstance(message, Message) else message,
             reply_to=(
-                message.reply_to_msg_id if isinstance(message, Message) else None
+                reply_to
+                if reply_to is not None
+                else (
+                    message.reply_to_msg_id if isinstance(message, Message) else None
+                )
             ),
         )

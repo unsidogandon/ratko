@@ -77,6 +77,7 @@ class Form(InlineUnit):
         location: str | None = None,
         audio: dict | str | None = None,
         silent: bool = False,
+        reply_to: Message | int | None = None,
     ) -> InlineMessage | bool:
         """
         Send inline form to chat
@@ -105,6 +106,8 @@ class Form(InlineUnit):
                          ⚠️ If you pass this parameter, you'll need to pass empty string to `text` ⚠️
         :param audio: Attach a audio to the form. Dict or URL must be supplied
         :param silent: Whether the form must be sent silently (w/o "Opening form..." message)
+        :param reply_to: Message or message ID to reply to. If passed, the form will be sent
+                         as a reply to this message
         :return: If form is sent, returns :obj:`InlineMessage`, otherwise returns `False`
         """
         with contextlib.suppress(AttributeError):
@@ -151,6 +154,13 @@ class Form(InlineUnit):
             logger.error(
                 "Invalid type for `message`. Expected `Message` or `int`, got `%s`",
                 type(message),
+            )
+            return False
+
+        if reply_to is not None and not isinstance(reply_to, (Message, int)):
+            logger.error(
+                "Invalid type for `reply_to`. Expected `Message` or `int`, got `%s`",
+                type(reply_to),
             )
             return False
 
@@ -324,7 +334,7 @@ class Form(InlineUnit):
             **({"gif": gif} if gif else {}),
             **({"location": location} if location else {}),
             **({"audio": audio} if audio else {}),
-            **({"location": location} if location else {}),
+            **({"file": file, "mime_type": mime_type} if file else {}),
             **({"perms_map": perms_map} if perms_map else {}),
             **({"message": message} if isinstance(message, Message) else {}),
             **({"force_me": force_me} if force_me else {}),
@@ -344,9 +354,11 @@ class Form(InlineUnit):
                 await self._client.send_message(message, msg)
 
         try:
-            m = await self._invoke_unit(unit_id, message)
+            m = await self._invoke_unit(unit_id, message, reply_to=reply_to)
         except ChatSendInlineForbiddenError:
             await answer(self.translator.getkey("inline.inline403"))
+            del self._units[unit_id]
+            return False
         except Exception as e:
             logger.exception("Can't send form")
 
@@ -455,7 +467,8 @@ class Form(InlineUnit):
                     return
 
         if (
-            inline_query.query not in self._units
+            inline_query.from_user.id != self._me
+            or inline_query.query not in self._units
             or self._units[inline_query.query]["type"] != "form"
         ):
             return
