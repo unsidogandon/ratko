@@ -9,7 +9,7 @@ import atexit as _atexit
 import contextlib
 import functools
 import logging
-import random
+import secrets
 import signal
 import sys
 import typing
@@ -60,7 +60,7 @@ def rand(size: int, /) -> str:
     :return: Random string
     """
     return "".join(
-        [random.choice("abcdefghijklmnopqrstuvwxyz1234567890") for _ in range(size)]
+        [secrets.choice("abcdefghijklmnopqrstuvwxyz1234567890") for _ in range(size)]
     )
 
 

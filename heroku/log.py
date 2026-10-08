@@ -25,7 +25,6 @@ import sys
 import traceback
 import typing
 import functools
-from logging.handlers import RotatingFileHandler
 from collections.abc import Coroutine
 from pathlib import Path
 
@@ -35,6 +34,7 @@ from herokutl.errors.rpcbaseerrors import ServerError, RPCError
 from herokutl.errors.rpcerrorlist import FloodWaitError
 
 from . import utils
+from ._internal import PrivateRotatingFileHandler, redact
 from .tl_cache import CustomTelegramClient
 from .types import BotInlineCall, Module, CoreOverwriteError
 
@@ -114,8 +114,8 @@ class HerokuException:
         full_stack: str,
         sysinfo: None | (tuple[object, Exception, traceback.TracebackException]) = None,
     ):
-        self.message = message
-        self.full_stack = full_stack
+        self.message = redact(message)
+        self.full_stack = redact(full_stack)
         self.sysinfo = sysinfo
         self.debug_url = None
 
@@ -152,7 +152,7 @@ class HerokuException:
 
             return dictionary
 
-        full_traceback = traceback.format_exc().replace(
+        full_traceback = redact(traceback.format_exc()).replace(
             "Traceback (most recent call last):\n",
             "",
         )
@@ -214,13 +214,13 @@ class HerokuException:
                 lineno,
                 utils.escape_html(name),
                 utils.escape_html(
-                    "".join(
+                    redact("".join(
                         traceback.format_exception_only(exc_type, exc_value)
-                    ).strip()
+                    ).strip())
                 ),
                 (
                     "\n💭 <b>Message:</b>"
-                    f" <code>{utils.escape_html(str(comment))}</code>"
+                    f" <code>{utils.escape_html(redact(comment))}</code>"
                     if comment
                     else ""
                 ),
@@ -555,7 +555,9 @@ class RatkoFormatter(logging.Formatter):
             record = copy.copy(record)
             record.name = f"ratko{record.name[len('heroku') :]}"
 
-        return BOT_TOKEN_PATTERN.sub("<redacted bot token>", super().format(record))
+        return redact(
+            BOT_TOKEN_PATTERN.sub("<redacted bot token>", super().format(record))
+        )
 
 
 _main_formatter = RatkoFormatter(
@@ -569,7 +571,7 @@ _tg_formatter = RatkoFormatter(
     style="%",
 )
 
-rotating_handler = RotatingFileHandler(
+rotating_handler = PrivateRotatingFileHandler(
     filename=Path(
         os.environ.get("RATKO_DATA_ROOT")
         or os.environ.get("HEROKU_DATA_ROOT")

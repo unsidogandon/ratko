@@ -28,6 +28,7 @@ from herokutl.errors import FloodWaitError, RPCError
 from herokutl.tl.types import Message
 
 from . import main, security, utils
+from ._internal import redact
 from .database import Database
 from .loader import Modules
 from .tl_cache import CustomTelegramClient
@@ -551,7 +552,7 @@ class CommandDispatcher:
                 )
 
         with contextlib.suppress(Exception):
-            await (message.edit if message.out else message.reply)(txt)
+            await (message.edit if message.out else message.reply)(redact(txt))
 
     async def watcher_exc(self, *_):
         logger.exception("Error running watcher", extra={"stack": inspect.stack()})

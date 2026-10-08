@@ -185,3 +185,10 @@ pastagpt_runtime/
 *.zip
 /deno
 reqs_*.txt
+.heroku-update-backups/
+.env.*
+*.pem
+*.key
+*credentials*.json
+git.zip
+.git.zip

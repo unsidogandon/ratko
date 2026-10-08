@@ -50,13 +50,20 @@ from herokutl.network.connection import (
     ConnectionTcpMTProxyRandomizedIntermediate,
 )
 from herokutl.password import compute_check
-from herokutl.sessions import MemorySession, SQLiteSession
+from herokutl.sessions import MemorySession, SQLiteSession, StringSession
 from herokutl.tl.functions.account import GetPasswordRequest
 from herokutl.tl.functions.auth import CheckPasswordRequest
 from herokutl.tl.functions.contacts import UnblockRequest
 
 from . import database, loader, utils, version
-from ._internal import print_banner, restart, run_exit_flushers
+from ._internal import (
+    install_task_tracking,
+    print_banner,
+    register_secret,
+    register_secrets,
+    restart,
+    run_exit_flushers,
+)
 from .dispatcher import CommandDispatcher
 from .logo import build_startup_logo
 from .progresslive import StartupLiveDisplay
@@ -340,11 +347,15 @@ def _read_config() -> dict:
         return _CONFIG_CACHE
 
     _CONFIG_CACHE = json.loads(CONFIG_PATH.read_text())
+    register_secrets(_CONFIG_CACHE)
     _CONFIG_MTIME_NS = stat.st_mtime_ns
     return _CONFIG_CACHE
 
 
 def _atomic_write_text(path: Path, content: str) -> None:
+    if path.is_symlink():
+        raise ValueError("Refusing to write private data through a symlink")
+
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
         dir=path.parent,
@@ -402,6 +413,7 @@ def save_config_key(key: str, value: str) -> bool:
     # Assign config value
     config[key] = value
     # And save config
+    register_secrets(config)
     _atomic_write_text(CONFIG_PATH, json.dumps(config, indent=4))
     _CONFIG_CACHE = config
     _CONFIG_MTIME_NS = CONFIG_PATH.stat().st_mtime_ns
@@ -715,6 +727,8 @@ class Heroku:
         self.loop.set_task_factory(_task_factory)
         self.loop.set_exception_handler(_event_loop_exception_handler)
 
+        install_task_tracking()
+
         self.clients = SuperList()
         self.ready = asyncio.Event()
         self._session_init_blocked = False
@@ -767,7 +781,8 @@ class Heroku:
         self.conn = ConnectionTcpFull
 
     def _migrate_sessions(self):
-        os.makedirs(SESSIONS_DIR, exist_ok=True)
+        os.makedirs(SESSIONS_DIR, mode=0o700, exist_ok=True)
+        os.chmod(SESSIONS_DIR, 0o700)
 
         with os.scandir(BASE_DIR) as entries:
             legacy = [
@@ -887,6 +902,8 @@ class Heroku:
             client.id = telegram_id
             client.hikka_me = me
             client.heroku_me = me
+            register_secret(StringSession.save(client.session))
+            register_secret(getattr(me, "phone", None))
 
         session = SQLiteSession(
             os.path.join(
@@ -954,6 +971,8 @@ class Heroku:
         client.id = telegram_id
         client.hikka_me = me
         client.heroku_me = me
+        register_secret(StringSession.save(client.session))
+        register_secret(getattr(me, "phone", None))
 
         db = database.Database(client)
         await db.init()
@@ -1257,6 +1276,8 @@ class Heroku:
             client.id = me.id
             client.hikka_me = me
             client.heroku_me = me
+            register_secret(StringSession.save(client.session))
+            register_secret(getattr(me, "phone", None))
 
             while await self.amain(first, client):
                 first = False

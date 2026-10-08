@@ -29,7 +29,7 @@ from herokutl.tl.functions.channels import EditTitleRequest
 from herokutl.tl.types import Message, User
 
 from . import main, utils
-from ._internal import register_exit_flusher
+from ._internal import register_exit_flusher, register_secrets
 from .pointers import (
     BaseSerializingMiddlewareDict,
     BaseSerializingMiddlewareList,
@@ -307,6 +307,7 @@ class Database(dict):
 
     def _update_from_read(self, items: dict) -> None:
         """Update DB from persisted storage without write-protection checks."""
+        register_secrets(items)
         super().update(items)
 
     def process_db_autofix(self, db: dict) -> bool:
@@ -530,6 +531,7 @@ class Database(dict):
             )
 
         super().setdefault(owner, {})[key] = value
+        register_secrets({key: value})
         return self._schedule_save()
 
     def __setitem__(self, owner: str, value: JSONSerializable) -> None:

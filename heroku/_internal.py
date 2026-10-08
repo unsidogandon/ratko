@@ -12,14 +12,18 @@
 
 import asyncio
 import atexit
+import base64
 import contextlib
+import html
 import logging
 import os
 import random
+import re
 import signal
 import sys
 from collections.abc import Callable
-from urllib.parse import unquote, urljoin, urlsplit
+from logging.handlers import RotatingFileHandler
+from urllib.parse import quote, unquote, urljoin, urlsplit
 
 
 _exit_flushers: list[Callable] = []
@@ -36,6 +40,110 @@ def run_exit_flushers() -> None:
     for flusher in _exit_flushers.copy():
         with contextlib.suppress(Exception):
             flusher()
+
+
+_secrets = set()
+_secret_names = re.compile(
+    r"(?:token|password|passwd|secret|api_?hash|api_?key|auth_?key|"
+    r"string_?session|session_?string|private_?key|basic_auth|redis_uri|"
+    r"redis_url|database_url|db_uri|credentials)",
+    re.I,
+)
+
+
+def register_secret(value):
+    """Register a value, which must never appear in logs"""
+    if isinstance(value, dict):
+        for item in value.values():
+            register_secret(item)
+    elif isinstance(value, (list, tuple, set)):
+        for item in value:
+            register_secret(item)
+    elif isinstance(value, str) and len(value) >= 4:
+        _secrets.update((value, html.escape(value), quote(value, safe="")))
+        if ":" in value:
+            _secrets.add(base64.b64encode(value.encode()).decode())
+
+
+def register_secrets(data):
+    """Scan a dict/list recursively and register values of secret-looking keys"""
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if _secret_names.search(str(key)):
+                register_secret(value)
+            elif isinstance(value, (dict, list, tuple)):
+                register_secrets(value)
+    elif isinstance(data, (list, tuple)):
+        for value in data:
+            register_secrets(value)
+
+
+def redact(text):
+    """Replace all registered and pattern-matched secrets with [REDACTED]"""
+    text = str(text)
+    for secret in sorted(_secrets.copy(), key=len, reverse=True):
+        text = text.replace(secret, "[REDACTED]")
+    text = re.sub(
+        r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
+        "[REDACTED PRIVATE KEY]",
+        text,
+        flags=re.S,
+    )
+    text = re.sub(r"\b\d{5,16}:[A-Za-z0-9_-]{30,}\b", "[REDACTED]", text)
+    text = re.sub(r"\b(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]{16,}\b", "[REDACTED]", text)
+    text = re.sub(r"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9+/_.=-]+", r"\1 [REDACTED]", text)
+    text = re.sub(r"(\w+://)[^\s/@]+:[^\s/@]+@", r"\1[REDACTED]@", text)
+    text = re.sub(
+        r"(?i)([\"']?(?:[\w.-]*(?:token|password|passwd|secret|api_key|api_hash|"
+        r"auth_key|session_string|basic_auth))[\"']?\s*[:=]\s*)"
+        r"(?:\"[^\"]*\"|'[^']*'|[^\s&,;<>]+)",
+        r"\1[REDACTED]",
+        text,
+    )
+    return text
+
+
+class RedactingFormatter(logging.Formatter):
+    def format(self, record):
+        return redact(super().format(record))
+
+
+class PrivateRotatingFileHandler(RotatingFileHandler):
+    def _open(self):
+        stream = super()._open()
+        if hasattr(os, "fchmod"):
+            os.fchmod(stream.fileno(), 0o600)
+        else:
+            os.chmod(self.baseFilename, 0o600)
+        return stream
+
+
+register_secrets(dict(os.environ))
+
+
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _track_task(task: asyncio.Task) -> asyncio.Task:
+    """Keep a strong reference to the task, so it is not garbage-collected mid-flight"""
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
+
+
+def install_task_tracking():
+    """Patch the event loop, so every created task is tracked via a strong reference"""
+    loop_cls = asyncio.base_events.BaseEventLoop
+    if getattr(loop_cls.create_task, "_heroku_tracked", False):
+        return
+
+    original_create_task = loop_cls.create_task
+
+    def create_task(self, coro, **kwargs):
+        return _track_task(original_create_task(self, coro, **kwargs))
+
+    create_task._heroku_tracked = True
+    loop_cls.create_task = create_task
 
 
 def validate_url(url):
