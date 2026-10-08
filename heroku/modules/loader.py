@@ -143,7 +143,7 @@ class LoaderMod(loader.Module):
 
     @loader.loop(interval=3, wait_before=True, autostart=True)
     async def _config_autosaver(self):
-        for mod in self.allmodules.modules:
+        for mod in self.allmodules.modules + self.allmodules.libraries:
             if (
                 not hasattr(mod, "config")
                 or not mod.config
@@ -151,28 +151,25 @@ class LoaderMod(loader.Module):
             ):
                 continue
 
-            for option, config in mod.config._config.items():
-                if not hasattr(config, "_save_marker"):
-                    continue
-
-                delattr(mod.config._config[option], "_save_marker")
-                mod.pointer("__config__", {})[option] = config.value
-
-        for lib in self.allmodules.libraries:
-            if (
-                not hasattr(lib, "config")
-                or not lib.config
-                or not isinstance(lib.config, loader.ModuleConfig)
-            ):
+            updates = {
+                option: config.value
+                for option, config in mod.config._config.items()
+                if hasattr(config, "_save_marker")
+            }
+            if not updates:
                 continue
 
-            for option, config in lib.config._config.items():
-                if not hasattr(config, "_save_marker"):
-                    continue
+            pointer = (
+                mod._lib_pointer
+                if isinstance(mod, loader.Library)
+                else mod.pointer
+            )
+            pointer("__config__", {}).update(updates)
+            for option in updates:
+                delattr(mod.config._config[option], "_save_marker")
 
-                delattr(lib.config._config[option], "_save_marker")
-                lib._lib_pointer("__config__", {})[option] = config.value
-
+        # Also detect edits made directly through the legacy dict API. Database
+        # save() skips disk writes when this snapshot has not changed.
         self._db.save()
 
     def update_modules_in_db(self):

@@ -76,6 +76,23 @@ def getlines(filename: str, module_globals=None) -> str:
 linecache.getlines = getlines
 
 
+def _get_logging_caller() -> int | None:
+    """Find the account logging tag without loading source lines for every frame."""
+    frame = None
+    try:
+        frame = sys._getframe(1)
+        while frame is not None:
+            caller = frame.f_locals.get("_heroku_client_id_logging_tag")
+            if isinstance(caller, int):
+                return caller
+            frame = frame.f_back
+    except Exception:
+        return None
+    finally:
+        del frame
+    return None
+
+
 def override_text(exception: Exception) -> str | None:
     """Returns error-specific description if available, else `None`"""
 
@@ -497,26 +514,7 @@ class TelegramLogsHandler(logging.Handler):
                 )
 
     def emit(self, record: logging.LogRecord):
-        try:
-            caller = next(
-                (
-                    frame_info.frame.f_locals["_heroku_client_id_logging_tag"]
-                    for frame_info in inspect.stack()
-                    if isinstance(
-                        getattr(getattr(frame_info, "frame", None), "f_locals", {}).get(
-                            "_heroku_client_id_logging_tag"
-                        ),
-                        int,
-                    )
-                ),
-                False,
-            )
-
-            if not isinstance(caller, int):
-                caller = None
-        except Exception:
-            caller = None
-
+        caller = _get_logging_caller()
         record.heroku_caller = caller
 
         if record.levelno >= self.tg_level:

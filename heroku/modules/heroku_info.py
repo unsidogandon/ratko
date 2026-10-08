@@ -176,14 +176,30 @@ class HerokuInfoMod(loader.Module):
 
         return bytes(body)
 
+    @staticmethod
+    def _get_runtime_info() -> dict:
+        """Collect blocking Git and CPU metrics outside the event loop."""
+        try:
+            up_to_date = utils.is_up_to_date()
+        except Exception:
+            up_to_date = None
+        return {
+            "up_to_date": up_to_date,
+            "build": utils.get_commit_url(),
+            "cpu_usage": utils.get_cpu_usage(),
+            "git_status": utils.get_git_status(),
+        }
+
     async def _render_info(
         self,
         start: float,
         template_key: str = "info_message",
     ) -> str:
+        runtime = await utils.run_sync(self._get_runtime_info)
         try:
-            up_to_date = utils.is_up_to_date()
-            if up_to_date:
+            if runtime["up_to_date"] is None:
+                upd = ""
+            elif runtime["up_to_date"]:
                 upd = self.strings["up-to-date"]
             else:
                 upd = self.strings["update_required"].format(prefix=self.get_prefix())
@@ -198,7 +214,7 @@ class HerokuInfoMod(loader.Module):
             .replace("{", "")
             .replace("}", "")
         )
-        build = utils.get_commit_url()
+        build = runtime["build"]
         _version = f'<i>{".".join(list(map(str, list(version.__version__))))}</i>'
         prefix = f"«<code>{utils.escape_html(self.get_prefix())}</code>»"
 
@@ -244,7 +260,7 @@ class HerokuInfoMod(loader.Module):
             "upd": upd,
             "python_ver": lib_platform.python_version(),
             "uptime": utils.formatted_uptime(),
-            "cpu_usage": utils.get_cpu_usage(),
+            "cpu_usage": runtime["cpu_usage"],
             "ram_usage": f"{utils.get_ram_usage()} MB",
             "swap_usage": swap_usage,
             "branch": version.branch,
@@ -255,7 +271,7 @@ class HerokuInfoMod(loader.Module):
             "cpu": f"{psutil.cpu_count(logical=False)} ({psutil.cpu_count()}) core(-s); {psutil.cpu_percent()}% total",
             "ping": round((time.perf_counter_ns() - start) / 10**6, 3),
             "htl_ver": herokutl.__version__,
-            "git_status": utils.get_git_status(),
+            "git_status": runtime["git_status"],
         }
         rich_banner_url = None
         if template_key == "rich_info_message":

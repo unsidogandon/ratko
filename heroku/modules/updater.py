@@ -168,7 +168,11 @@ class UpdaterMod(loader.Module):
 
         return res
 
-    def _get_update_state(self) -> tuple[str, str, str | typing.Literal[False]]:
+    def _get_update_state(
+        self, branch: str | None = None
+    ) -> tuple[str, str, str | typing.Literal[False]]:
+        branch = branch if branch is not None else self.config["GIT_BRANCH"]
+        target_ref = f"origin/{branch}"
         with git.Repo() as repo:
             origin = repo.remote("origin")
             now = time.monotonic()
@@ -181,10 +185,7 @@ class UpdaterMod(loader.Module):
                             "fetch",
                             "--quiet",
                             "origin",
-                            (
-                                f"+refs/heads/{self.config['GIT_BRANCH']}:"
-                                f"refs/remotes/{self._target_ref}"
-                            ),
+                            f"+refs/heads/{branch}:refs/remotes/{target_ref}",
                         ],
                         cwd=repo.working_dir,
                         timeout=60,
@@ -199,8 +200,8 @@ class UpdaterMod(loader.Module):
                 )
 
             current = repo.head.commit.hexsha
-            latest = next(repo.iter_commits(self._target_ref, max_count=1)).hexsha
-            commits = [*repo.iter_commits(f"HEAD..{self._target_ref}")]
+            latest = next(repo.iter_commits(target_ref, max_count=1)).hexsha
+            commits = [*repo.iter_commits(f"HEAD..{target_ref}")]
 
             return (
                 current,
@@ -230,11 +231,18 @@ class UpdaterMod(loader.Module):
     async def poller(self):
         if NO_GIT:
             return
+        branch = self.config["GIT_BRANCH"]
         try:
-            current, self._pending, changelog = self._get_update_state()
+            current, pending, changelog = await utils.run_sync(
+                self._get_update_state, branch
+            )
         except Exception as e:
             self._log_git_poll_error(e)
             return
+
+        if branch != self.config["GIT_BRANCH"]:
+            return
+        self._pending = pending
 
         if (
             self.config["disable_notifications"] and not self.config["autoupdate"]

@@ -91,6 +91,7 @@ class Database(dict):
         self._next_revision_call: int = 0
         self._revisions: list[str] = []
         self._save_scheduled: bool = False
+        self._last_saved_data: str | None = None
         self._me: User = None
         self._redis: typing.Any = None
         self._saving_task: asyncio.Future = None
@@ -325,6 +326,7 @@ class Database(dict):
         """Update DB from persisted storage without write-protection checks."""
         register_secrets(items)
         super().update(items)
+        self._last_saved_data = None
 
     def process_db_autofix(self, db: dict) -> bool:
         if not utils.is_serializable(db):
@@ -365,7 +367,7 @@ class Database(dict):
         return True
 
     def save(self) -> bool:
-        """Save database"""
+        """Save changed database content, including direct edits to nested values."""
         try:
             data = json.dumps(self)
         except (TypeError, ValueError):
@@ -376,6 +378,12 @@ class Database(dict):
                 data = json.dumps(self)
             except (TypeError, ValueError):
                 self._restore_revision()
+
+        # Keep serializing here for modules which mutate nested dicts directly,
+        # but avoid rewriting and fsyncing the same snapshot every three seconds.
+        # Redis retains its existing delayed-save behavior.
+        if not self._redis and data == self._last_saved_data:
+            return True
 
         if self._next_revision_call < time.time():
             self._revisions += [data]
@@ -395,6 +403,7 @@ class Database(dict):
             logger.exception("Database save failed!")
             return False
 
+        self._last_saved_data = data
         return True
 
     def _restore_revision(self) -> typing.NoReturn:
@@ -442,8 +451,10 @@ class Database(dict):
             logger.exception("Deferred database save failed")
 
     def _flush_pending(self) -> None:
-        """Write pending debounced changes to disk immediately (on restart)"""
-        if self._save_scheduled:
+        """Flush debounced and direct nested changes before restart or shutdown."""
+        if self._save_scheduled or (
+            not self._redis and hasattr(self, "_db_file")
+        ):
             self._flush()
 
     async def store_asset(self, message: Message) -> int:
