@@ -89,6 +89,12 @@ class Help(loader.Module):
                 lambda: self.strings["show_preview_in_help"],
                 validator=loader.validators.Boolean(),
             ),
+            loader.ConfigValue(
+                "rich_mode",
+                True,
+                lambda: self.strings["_cfg_rich_mode"],
+                validator=loader.validators.Boolean(),
+            ),
         )
 
     def config_complete(self):
@@ -270,6 +276,7 @@ class Help(loader.Module):
         )
 
         banner_kwargs = {}
+        banner_url = None
         if self.config["show_preview_in_help"]:
             try:
                 source = getattr(module, "__source__", None)
@@ -283,7 +290,44 @@ class Help(loader.Module):
             except Exception:
                 pass
 
-        await utils.answer(
+        if self.config["rich_mode"]:
+            rich_reply = reply.replace("\r\n", "<br>").replace("\n", "<br>")
+            rich_commands = "".join(f"<p>{line.strip()}</p>" for line in lines)
+            rich_inline_commands = inline_cmd.replace("\r\n", "<br>").replace(
+                "\n", "<br>"
+            )
+            rich_message = (
+                f"{rich_reply}<details><summary>{self.strings['rich_commands']}</summary>"
+                f"{rich_commands}{rich_inline_commands}</details>"
+                + (
+                    f"<details><summary>{self.strings['rich_placeholders']}</summary>"
+                    f"{placeholders}</details>"
+                    if placeholders
+                    else ""
+                )
+                + (
+                    f"<p>{self.strings['developer'].format(dev_text)}</p>"
+                    if dev_text
+                    else ""
+                )
+                + (f"<p>{self.strings['not_exact']}</p>" if not exact else "")
+                + (
+                    f"<p>{self.strings['core_notice']}</p>"
+                    if module.__origin__.startswith("<core")
+                    else ""
+                )
+            )
+            if banner_url:
+                rich_message = (
+                    f'<figure><img src="{banner_url}"/></figure>' + rich_message
+                )
+            await utils.answer_with_media_fallback(
+                message,
+                rich_message=rich_message,
+            )
+            return
+
+        await utils.answer_with_media_fallback(
             message,
             f"{reply}<blockquote expandable>{cmds}{inline_cmd}</blockquote>"
             + (
@@ -468,9 +512,42 @@ class Help(loader.Module):
         core_.sort(key=str.lower)
         no_commands_.sort(key=str.lower)
 
+        if self.config["rich_mode"]:
+            rich_message = (
+                (
+                    f"<figure><img src=\"{self.config['banner_url']}\"/></figure>"
+                    if self.config["banner_url"]
+                    else ""
+                )
+                + f"{self.config['desc_icon']} {reply}"
+            )
+            rich_core = "".join(f"<p>{item.strip()}</p>" for item in core_)
+            rich_modules = "".join(
+                f"<p>{item.strip()}</p>"
+                for item in plain_ + (no_commands_ if force else [])
+            )
+            if only_core:
+                sections = [(self.strings["rich_core"], rich_core)]
+            elif only_loaded:
+                sections = [(self.strings["rich_modules"], rich_modules)]
+            else:
+                sections = [
+                    (self.strings["rich_core"], rich_core),
+                    (self.strings["rich_modules"], rich_modules),
+                ]
+            rich_message += "".join(
+                f"<details><summary>{title}</summary>{content}</details>"
+                for title, content in sections
+                if content
+            )
+            if not self.lookup("LoaderMod").fully_loaded:
+                rich_message += f"<p>{self.strings['partial_load']}</p>"
+            await utils.answer_with_media_fallback(message, rich_message=rich_message)
+            return
+
         match True:
             case _ if only_core:
-                await utils.answer(
+                await utils.answer_with_media_fallback(
                     message,
                     (
                         self.config["desc_icon"]
@@ -488,7 +565,7 @@ class Help(loader.Module):
                     invert_media=self.config["invert_media"],
                 )
             case _ if only_loaded:
-                await utils.answer(
+                await utils.answer_with_media_fallback(
                     message,
                     (
                         self.config["desc_icon"]
@@ -506,7 +583,7 @@ class Help(loader.Module):
                     invert_media=self.config["invert_media"],
                 )
             case _:
-                await utils.answer(
+                await utils.answer_with_media_fallback(
                     message,
                     (
                         self.config["desc_icon"]

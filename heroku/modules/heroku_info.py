@@ -113,6 +113,12 @@ class HerokuInfoMod(loader.Module):
                 "Switch preview invert media",
                 validator=loader.validators.Boolean(),
             ),
+            loader.ConfigValue(
+                "rich_mode",
+                True,
+                lambda: self.strings["_cfg_rich_mode"],
+                validator=loader.validators.Boolean(),
+            ),
         )
 
     def _get_os_name(self):
@@ -124,7 +130,16 @@ class HerokuInfoMod(loader.Module):
         except FileNotFoundError:
             return self.strings["non_detectable"]
 
-    def _get_effective_info_template(self) -> str:
+    def _get_effective_info_template(
+        self, template_key: str = "info_message"
+    ) -> str:
+        if template_key == "rich_info_message":
+            custom_message = self.config["custom_message"]
+            if not custom_message or custom_message == DEFAULT_INFO_MESSAGE:
+                return self.strings["rich_info_message"]
+
+            return custom_message
+
         return self.config["custom_message"] or DEFAULT_INFO_MESSAGE
 
     def _get_effective_banner(self) -> tuple[str | None, bool]:
@@ -160,7 +175,11 @@ class HerokuInfoMod(loader.Module):
 
         return bytes(body)
 
-    async def _render_info(self, start: float) -> str:
+    async def _render_info(
+        self,
+        start: float,
+        template_key: str = "info_message",
+    ) -> str:
         try:
             up_to_date = utils.is_up_to_date()
             if up_to_date:
@@ -237,7 +256,15 @@ class HerokuInfoMod(loader.Module):
             "htl_ver": herokutl.__version__,
             "git_status": utils.get_git_status(),
         }
-        template = self._get_effective_info_template()
+        if template_key == "rich_info_message":
+            rich_banner_url, _ = self._get_effective_banner()
+            data["banner_url"] = rich_banner_url
+            data["img"] = (
+                f'<img src="{utils.escape_html(str(rich_banner_url))}"/>'
+                if rich_banner_url
+                else ""
+            )
+        template = self._get_effective_info_template(template_key)
         data = await utils.get_placeholders(data, template)
 
         try:
@@ -249,6 +276,18 @@ class HerokuInfoMod(loader.Module):
     @loader.command()
     async def infocmd(self, message: Message):
         start = time.perf_counter_ns()
+
+        if self.config["rich_mode"]:
+            await utils.answer_with_media_fallback(
+                message,
+                rich_message=await self._render_info(
+                    start,
+                    template_key="rich_info_message",
+                ),
+                reply_to=getattr(message, "reply_to_msg_id", None),
+            )
+            return
+
         banner_url, random_cat = self._get_effective_banner()
         rendered = await self._render_info(start)
         media = str(banner_url)

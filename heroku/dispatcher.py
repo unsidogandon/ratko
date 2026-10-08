@@ -16,6 +16,7 @@ import asyncio
 import collections
 import contextlib
 import copy
+import html
 import inspect
 import logging
 from collections.abc import Callable
@@ -230,7 +231,10 @@ class CommandDispatcher:
 
         ungrep = False
 
-        if re.search(r"-v (.+)", grep):
+        if grep.startswith("-v "):
+            ungrep = grep[3:]
+            grep = False
+        elif re.search(r"-v (.+)", grep):
             ungrep = re.search(r"-v (.+)", grep).group(1)
             grep = re.sub(r"(.+) -v .+", r"\g<1>", grep)
 
@@ -241,24 +245,34 @@ class CommandDispatcher:
         old_reply = message.reply
         old_respond = message.respond
 
-        def process_text(text: str) -> str:
+        def process_text(text: str, *, rich: bool = False) -> str:
             nonlocal grep, ungrep
             res = []
+            if rich:
+                from .utils.grep import filter_rich_lines
 
-            for line in text.split("\n"):
+                res = filter_rich_lines(
+                    text,
+                    html.unescape(grep) if grep else "",
+                    html.unescape(ungrep) if ungrep else "",
+                )
+
+            for line in ([] if rich else text.split("\n")):
                 if (
                     grep
                     and grep in utils.remove_html(line)
                     and (not ungrep or ungrep not in utils.remove_html(line))
                 ):
                     res.append(
-                        utils.remove_html(line, escape=True).replace(
-                            grep, f"<u>{grep}</u>"
-                        )
+                        utils.remove_html(
+                            line, escape=True, keep_emojis=True
+                        ).replace(grep, f"<u>{grep}</u>")
                     )
 
                 if not grep and ungrep and ungrep not in utils.remove_html(line):
-                    res.append(utils.remove_html(line, escape=True))
+                    res.append(
+                        utils.remove_html(line, escape=True, keep_emojis=True)
+                    )
 
             cont = (
                 (f"contain <b>{grep}</b>" if grep else "")
@@ -292,6 +306,13 @@ class CommandDispatcher:
         message.edit = my_edit
         message.reply = my_reply
         message.respond = my_respond
+
+        def process_rich(text: str) -> str:
+            return "".join(
+                f"<p>{line}</p>" for line in process_text(text, rich=True).split("\n")
+            )
+
+        message._heroku_grep_rich = process_rich
         message.heroku_grepped = True
 
         return message

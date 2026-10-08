@@ -76,6 +76,7 @@ class Form(InlineUnit):
         video: str | None = None,
         location: str | None = None,
         audio: dict | str | None = None,
+        rich_message: typing.Any = None,
         silent: bool = False,
         reply_to: Message | int | None = None,
     ) -> InlineMessage | bool:
@@ -325,7 +326,9 @@ class Form(InlineUnit):
             "caller": message,
             "chat": None,
             "message_id": None,
-            "top_msg_id": utils.get_topic(message),
+            "top_msg_id": (
+                utils.get_topic(message) if isinstance(message, Message) else None
+            ),
             "uid": unit_id,
             "on_unload": on_unload,
             "future": Event(),
@@ -334,6 +337,7 @@ class Form(InlineUnit):
             **({"gif": gif} if gif else {}),
             **({"location": location} if location else {}),
             **({"audio": audio} if audio else {}),
+            **({"rich_message": rich_message} if rich_message is not None else {}),
             **({"file": file, "mime_type": mime_type} if file else {}),
             **({"perms_map": perms_map} if perms_map else {}),
             **({"message": message} if isinstance(message, Message) else {}),
@@ -477,6 +481,21 @@ class Form(InlineUnit):
         form_text = "☃️" if form.get("premium_emoji_pre_edit") else form.get("text")
         try:
             match True:
+                case _ if "rich_message" in form:
+                    rich_value = form["rich_message"]
+                    if not isinstance(rich_value, str):
+                        raise TypeError("Inline bot Rich forms require HTML text")
+                    await inline_query.answer(
+                        [
+                            await inline_query.rich_article(
+                                title="Ratko",
+                                html=rich_value,
+                                buttons=self.generate_markup(form["uid"]),
+                                id=utils.rand(20),
+                            )
+                        ],
+                        cache_time=0,
+                    )
                 case _ if "photo" in form:
                     await inline_query.answer(
                         [

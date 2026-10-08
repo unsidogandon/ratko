@@ -1,4 +1,4 @@
-herokutl==2.1.0
+herokutl @ git+https://github.com/unsidogandon/ratko-tl@2.2
 pyaes
 aiofile==3.8.1
 aiofiles==24.1.0
