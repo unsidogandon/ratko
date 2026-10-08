@@ -89,6 +89,9 @@ class CoreMod(loader.Module):
         de_doc="Informationen über ratko userbot",
     )
     async def ratkocmd(self, message: Message):
+        git_hash = utils.get_git_hash()
+        build = f"#{git_hash[:7]}" if git_hash else "Unknown"
+
         if self.config["rich_mode"]:
             rich_message = self.strings["rich_ratko_message"].format(
                 platform=(
@@ -97,7 +100,7 @@ class CoreMod(loader.Module):
                     else "☃️"
                 ),
                 version=".".join(map(str, version.__version__)),
-                build=utils.get_commit_url(),
+                build=build,
                 htl_version=herokutl.__version__,
                 layer=herokutl.tl.alltlobjects.LAYER,
                 current_user=getpass.getuser(),
@@ -119,7 +122,7 @@ class CoreMod(loader.Module):
                     else "☃️ <b>ratko userbot</b>"
                 ),
                 *version.__version__,
-                utils.get_commit_url(),
+                build,
             ),
             file="https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",
             reply_to=getattr(message, "reply_to_msg_id", None),
