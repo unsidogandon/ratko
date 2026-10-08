@@ -1055,6 +1055,15 @@ class Heroku:
         if self.arguments.no_auth:
             return False
 
+        if not sys.stdin.isatty():
+            logging.critical(
+                "Interactive login is required, but no terminal is attached. "
+                "The session was likely terminated and must be re-authorized. "
+                "Refusing to prompt in a non-interactive environment to avoid "
+                "a restart loop. Re-login manually or run me from a terminal."
+            )
+            raise RuntimeError("No TTY available for interactive login")
+
         client = CustomTelegramClient(
             MemorySession(),
             self.api_token.ID,
