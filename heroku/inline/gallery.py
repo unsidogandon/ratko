@@ -239,6 +239,7 @@ class Gallery(InlineUnit):
         }
 
         self._custom_map[btn_call_data] = {
+            "unit_id": unit_id,
             "handler": functools.partial(
                 self._gallery_page,
                 unit_id=unit_id,
@@ -285,14 +286,17 @@ class Gallery(InlineUnit):
 
         try:
             m = await self._invoke_unit(unit_id, message)
+        except asyncio.CancelledError:
+            await self._unload_unit(unit_id)
+            raise
         except ChatSendInlineForbiddenError:
+            await self._unload_unit(unit_id)
             await answer(self.translator.getkey("inline.inline403"))
-            del self._units[unit_id]
             return False
         except Exception:
             logger.exception("Error sending inline gallery")
 
-            del self._units[unit_id]
+            await self._unload_unit(unit_id)
 
             if _reattempt:
                 logger.exception("Can't send gallery")
@@ -314,8 +318,8 @@ class Gallery(InlineUnit):
 
             return await self.gallery(**kwargs)
 
-        await self._units[unit_id]["future"].wait()
-        del self._units[unit_id]["future"]
+        if not await self._wait_for_unit(unit_id):
+            return False
 
         self._units[unit_id]["chat"] = utils.get_chat_id(m)
         self._units[unit_id]["message_id"] = m.id

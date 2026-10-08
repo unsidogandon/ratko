@@ -359,14 +359,17 @@ class Form(InlineUnit):
 
         try:
             m = await self._invoke_unit(unit_id, message, reply_to=reply_to)
+        except asyncio.CancelledError:
+            await self._unload_unit(unit_id)
+            raise
         except ChatSendInlineForbiddenError:
+            await self._unload_unit(unit_id)
             await answer(self.translator.getkey("inline.inline403"))
-            del self._units[unit_id]
             return False
         except Exception as e:
             logger.exception("Can't send form")
 
-            del self._units[unit_id]
+            await self._unload_unit(unit_id)
 
             if "No query results" in str(e):
                 await answer(
@@ -388,8 +391,8 @@ class Form(InlineUnit):
 
             return False
 
-        await self._units[unit_id]["future"].wait()
-        del self._units[unit_id]["future"]
+        if not await self._wait_for_unit(unit_id):
+            return False
 
         self._units[unit_id]["chat"] = utils.get_chat_id(m)
         self._units[unit_id]["message_id"] = m.id

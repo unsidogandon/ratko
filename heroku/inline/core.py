@@ -556,27 +556,27 @@ class InlineManager(
                 logger.exception("Inline query for unit %s failed", unit_id)
 
         async def event_poller():
-            nonlocal exception
             try:
                 await asyncio.wait_for(event.wait(), timeout=10)
             except asyncio.TimeoutError:
                 logger.debug("Inline query for unit %s timed out after 10s", unit_id)
                 return
-            if self._error_events.get(unit_id):
-                exception = self._error_events[unit_id]
 
         result_getter_task = asyncio.ensure_future(result_getter())
         event_poller_task = asyncio.ensure_future(event_poller())
 
-        _, pending = await asyncio.wait(
-            [result_getter_task, event_poller_task],
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-
-        for task in pending:
-            task.cancel()
-
-        self._error_events.pop(unit_id, None)
+        tasks = (result_getter_task, event_poller_task)
+        try:
+            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            error = self._error_events.get(unit_id)
+            if isinstance(error, Exception):
+                exception = error
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            self._error_events.pop(unit_id, None)
 
         if exception:
             raise exception  # skipcq: PYL-E0702
@@ -584,13 +584,40 @@ class InlineManager(
         if not q:
             raise Exception("No query results")
 
-        return await q[0].click(
-            utils.get_chat_id(message) if isinstance(message, Message) else message,
-            reply_to=(
-                reply_to
-                if reply_to is not None
-                else (
-                    message.reply_to_msg_id if isinstance(message, Message) else None
-                )
+        return await asyncio.wait_for(
+            q[0].click(
+                utils.get_chat_id(message) if isinstance(message, Message) else message,
+                reply_to=(
+                    reply_to
+                    if reply_to is not None
+                    else (
+                        message.reply_to_msg_id if isinstance(message, Message) else None
+                    )
+                ),
             ),
+            timeout=30,
         )
+
+    async def _wait_for_unit(self, unit_id: str, timeout: float = 30) -> bool:
+        """Wait for Telegram's chosen result without leaving a stranded form."""
+        unit = self._units.get(unit_id)
+        if unit is None:
+            return False
+        event = unit.get("future")
+        try:
+            if event is not None:
+                await asyncio.wait_for(event.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
+            logger.warning("Inline unit %s did not receive a chosen result", unit_id)
+            await self._unload_unit(unit_id)
+            return False
+        except asyncio.CancelledError:
+            await self._unload_unit(unit_id)
+            raise
+        if self._units.get(unit_id) is not unit:
+            return False
+        if not unit.get("inline_message_id"):
+            await self._unload_unit(unit_id)
+            return False
+        unit.pop("future", None)
+        return True

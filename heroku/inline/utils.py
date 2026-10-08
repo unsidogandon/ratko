@@ -624,11 +624,13 @@ class Utils(InlineUnit):
             if callable(unit.get("on_unload")):
                 result = unit["on_unload"]()
                 if inspect.isawaitable(result):
-                    await result
+                    await asyncio.wait_for(result, timeout=10)
         except Exception:
             logger.exception("Inline unit %s failed during on_unload", unit_id)
         finally:
             self._units.pop(unit_id, None)
+            if unit.get("future") is not None:
+                unit["future"].set()
             callback_ids = {
                 button.get("_callback_data")
                 for key in ("buttons", "custom_buttons")

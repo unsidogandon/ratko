@@ -728,13 +728,17 @@ class Modules:
             _heroku_client_id_logging_tag = copy.copy(self.client.tg_id)  # noqa: F841
 
         module = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = module
-
-        source_data = (
-            spec.loader.data.decode()
-            if hasattr(spec.loader, "data") and spec.loader.data
-            else None
+        previous_module = sys.modules.get(module_name)
+        previous_instance = next(
+            (
+                instance
+                for instance in self.modules
+                if previous_module is not None
+                and getattr(instance, "__python_module__", None) is previous_module
+            ),
+            None,
         )
+        sys.modules[module_name] = module
 
         async def _exec_module():
             attempted = False
@@ -743,7 +747,7 @@ class Modules:
                     spec.loader.exec_module(module)
                     break
                 except ImportError as e:
-                    if not spec.loader.data or attempted:
+                    if not getattr(spec.loader, "data", None) or attempted:
                         raise
 
                     data = spec.loader.data
@@ -781,52 +785,72 @@ class Modules:
 
                     attempted = True
 
-        await _exec_module()
-
         ret = None
-
-        ret = next(
-            (
-                value()
-                for value in vars(module).values()
-                if inspect.isclass(value) and issubclass(value, Module)
-            ),
-            None,
-        )
-
-        if hasattr(module, "__version__"):
-            ret.__version__ = module.__version__
-
-        if ret is None:
-            ret = module.register(module_name)
-            if not isinstance(ret, Module):
-                raise TypeError(f"Instance is not a Module, it is {type(ret)}")
-
-        ret.__origin__ = origin
-
-        ret.__source__ = (
-            source_data if source_data else inspect.getsource(ret.__class__)
-        )
-
-        if not hasattr(ret, "name"):
-            ret.name = ret.strings["name"]
-
-        await self.complete_registration(ret)
-
-        cls_name = ret.__class__.__name__
-
-        if save_fs:
-            path = os.path.join(
-                LOADED_MODULES_DIR,
-                f"{cls_name}_{self.client.tg_id}.py",
+        try:
+            source_data = (
+                spec.loader.data.decode()
+                if getattr(spec.loader, "data", None)
+                else None
             )
+            await _exec_module()
+            module_classes = [
+                value
+                for value in vars(module).values()
+                if inspect.isclass(value)
+                and value is not Module
+                and issubclass(value, Module)
+            ]
+            module_class = next(
+                (value for value in module_classes if value.__module__ == module_name),
+                module_classes[0] if module_classes else None,
+            )
+            if module_class is not None:
+                ret = module_class()
+            else:
+                ret = module.register(module_name)
+                if not isinstance(ret, Module):
+                    raise TypeError(f"Instance is not a Module, it is {type(ret)}")
 
-            if origin == "<string>":
-                Path(path).write_text(spec.loader.data.decode(), encoding="utf-8")
+            ret.__python_module__ = module
+            if hasattr(module, "__version__"):
+                ret.__version__ = module.__version__
+            ret.__origin__ = origin
+            ret.__source__ = source_data or inspect.getsource(ret.__class__)
+            if not hasattr(ret, "name"):
+                ret.name = ret.strings["name"]
 
-                logger.debug("Saved class %s to path %s", cls_name, path)
+            await self.complete_registration(ret)
+            if save_fs and origin == "<string>":
+                path = os.path.join(
+                    LOADED_MODULES_DIR,
+                    f"{ret.__class__.__name__}_{self.client.tg_id}.py",
+                )
+                Path(path).write_text(ret.__source__, encoding="utf-8")
+                logger.debug("Saved class %s to path %s", ret.__class__.__name__, path)
+        except BaseException:
+            if sys.modules.get(module_name) is module:
+                if previous_module is None or (
+                    previous_instance is not None
+                    and previous_instance not in self.modules
+                ):
+                    sys.modules.pop(module_name, None)
+                else:
+                    sys.modules[module_name] = previous_module
+            if ret in self.modules:
+                self.modules.remove(ret)
+                await self._shutdown_module(ret, "failed registration")
+            raise
 
         return ret
+
+    @staticmethod
+    def _forget_module_namespace(instance: Module):
+        """Only remove the Python namespace owned by this exact instance."""
+        module = getattr(instance, "__python_module__", None)
+        if module is not None and sys.modules.get(module.__name__) is module:
+            sys.modules.pop(module.__name__, None)
+        if module is not None:
+            del instance.__python_module__
 
     def add_aliases(self, aliases: dict):
         """Saves aliases and applies them to <core>/<file> modules"""
@@ -1128,10 +1152,8 @@ class Modules:
             return None
 
         for command_name, _command in self.commands.items():
-            aliases = []
-            if getattr(_command, "alias", None) and not (
-                aliases := getattr(_command, "aliases", None)
-            ):
+            aliases = getattr(_command, "aliases", None) or []
+            if not aliases and getattr(_command, "alias", None):
                 aliases = [_command.alias]
 
             if not aliases:
@@ -1252,6 +1274,24 @@ class Modules:
         no_self_unload: bool = False,
         from_dlmod: bool = False,
     ):
+        try:
+            return await self._send_ready_one(mod, no_self_unload, from_dlmod)
+        except (SelfUnload, SelfSuspend):
+            raise
+        except (Exception, asyncio.CancelledError):
+            try:
+                await self._shutdown_module(mod, "failed initialization")
+            finally:
+                if mod in self.modules:
+                    self.modules.remove(mod)
+            raise
+
+    async def _send_ready_one(
+        self,
+        mod: Module,
+        no_self_unload: bool = False,
+        from_dlmod: bool = False,
+    ):
         with contextlib.suppress(AttributeError):
             _heroku_client_id_logging_tag = copy.copy(self.client.tg_id)  # noqa: F841
 
@@ -1311,14 +1351,14 @@ class Modules:
             )
 
             if pack_url and (
-                transations := await self.translator.load_module_translations(
+                translations := await self.translator.load_module_translations(
                     pack_url,
                     MODULES_LANGPACKS_PATH
                     / f"{self.client.tg_id}_{mod.__class__.__name__}.yml",
                     cache_only=not from_dlmod,
                 )
             ):
-                mod.strings.external_strings = transations
+                mod.strings.external_strings = translations
 
         for _, method in utils.iter_attrs(mod):
             if isinstance(method, InfiniteLoop):
@@ -1440,6 +1480,12 @@ class Modules:
             task.exception()
 
     async def _finish_shutdown(self, module: Module, purpose: str, caller):
+        try:
+            await self._finish_shutdown_handlers(module, purpose, caller)
+        finally:
+            self._forget_module_namespace(module)
+
+    async def _finish_shutdown_handlers(self, module: Module, purpose: str, caller):
         for unregister in (
             self.unregister_raw_handlers,
             self.unregister_bot_update_handlers,

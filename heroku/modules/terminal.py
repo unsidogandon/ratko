@@ -11,15 +11,18 @@
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
 import asyncio
+import codecs
 import contextlib
+import functools
+import inspect
 import logging
 import os
 import re
 import shlex
+import signal
 import time
 import typing
 from collections.abc import Callable
-import signal
 
 import herokutl
 
@@ -29,14 +32,17 @@ logger = logging.getLogger(__name__)
 
 BANNER_OK = "https://x0.at/grz4.jpg"
 BANNER_BAD = "https://x0.at/4AAH.jpg"
+STREAM_BUFFER_LIMIT = 64 * 1024
 
 
 def hash_msg(message):
     return f"{str(utils.get_chat_id(message))}/{str(message.id)}"
 
 
-async def read_stream(func: Callable, stream, delay: float):
-    data = bytearray()
+async def read_stream(func: Callable, stream, delay: float, *, report_offset=False):
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    data = ""
+    offset = 0
     dirty = False
     last_update = time.monotonic()
     interval = max(float(delay), 0.05)
@@ -45,15 +51,22 @@ async def read_stream(func: Callable, stream, delay: float):
             chunk = await asyncio.wait_for(stream.read(4096), timeout=interval)
         except asyncio.TimeoutError:
             chunk = None
+        if chunk is not None:
+            decoded = decoder.decode(chunk, final=chunk == b"")
+            data += decoded
+            if len(data) > STREAM_BUFFER_LIMIT:
+                removed = len(data) - STREAM_BUFFER_LIMIT
+                offset += removed
+                data = data[removed:]
+            dirty = dirty or bool(decoded)
         if chunk == b"":
             if dirty:
-                await func(data.decode(errors="replace"))
+                await func(data, **({"offset": offset} if report_offset else {}))
             return
         if chunk:
-            data.extend(chunk)
             dirty = True
         if dirty and time.monotonic() - last_update >= interval:
-            await func(data.decode(errors="replace"))
+            await func(data, **({"offset": offset} if report_offset else {}))
             dirty = False
             last_update = time.monotonic()
 
@@ -89,7 +102,7 @@ class MessageEditor:
         self.stdout = stdout
         await self.redraw()
 
-    async def update_stderr(self, stderr):
+    async def update_stderr(self, stderr, *, offset=0):
         self.stderr = stderr
         await self.redraw()
 
@@ -136,7 +149,7 @@ class SudoMessageEditor(MessageEditor):
     def update_process(self, process):
         self.process = process
 
-    async def update_stderr(self, stderr):
+    async def update_stderr(self, stderr, *, offset=0):
         async with self._output_lock:
             self.stderr = stderr
             if self.inline_editor is None and InlineMessageEditor.password_requested(stderr):
@@ -152,7 +165,7 @@ class SudoMessageEditor(MessageEditor):
                 editor.start_time = self.start_time
                 editor.update_process(self.process)
                 editor.owner_id = self.request_message.client.heroku_me.id
-                editor.observe_password_prompt()
+                editor.observe_password_prompt(offset=offset)
                 form = await module.inline.form(
                     message=self.message,
                     text=editor.render_text(),
@@ -166,9 +179,9 @@ class SudoMessageEditor(MessageEditor):
                     return
                 editor.form = form
                 self.inline_editor = editor
-                module._inline_sessions[form.unit_id] = editor
+                module._track_inline_session(form.unit_id, editor)
             elif self.inline_editor is not None:
-                await self.inline_editor.update_stderr(stderr)
+                await self.inline_editor.update_stderr(stderr, offset=offset)
             else:
                 await self.redraw()
 
@@ -202,6 +215,7 @@ class InlineMessageEditor:
         self.config = config
         self.reply_markup = reply_markup
         self.start_time = time.time()
+        self.last_activity = time.monotonic()
         self.process = None
         self.owner_id = getattr(getattr(form, "inline_manager", None), "_me", None)
         self.waiting_password = False
@@ -217,11 +231,12 @@ class InlineMessageEditor:
             stderr,
         )
 
-    def observe_password_prompt(self):
+    def observe_password_prompt(self, *, offset=0):
         prompt = self.password_requested(self.stderr)
+        prompt_end = offset + len(self.stderr.rstrip())
         if (
             prompt
-            and prompt.end() > self._prompt_end
+            and prompt_end > self._prompt_end
             and self.rc is None
             and self.process is not None
             and self.process.returncode is None
@@ -229,7 +244,7 @@ class InlineMessageEditor:
             self._auth_notice = self.strings[
                 "sudo_password_retry" if self._prompt_end else "sudo_password_required"
             ]
-            self._prompt_end = prompt.end()
+            self._prompt_end = prompt_end
             self._password_token = utils.rand(24)
             self.waiting_password = True
 
@@ -283,6 +298,7 @@ class InlineMessageEditor:
         self.stderr = ""
         self.rc = None
         self.start_time = time.time()
+        self.last_activity = time.monotonic()
         self.process = None
         self.waiting_password = False
         self._prompt_end = 0
@@ -296,9 +312,9 @@ class InlineMessageEditor:
         self.stdout = stdout
         await self.redraw()
 
-    async def update_stderr(self, stderr):
+    async def update_stderr(self, stderr, *, offset=0):
         self.stderr = stderr
-        self.observe_password_prompt()
+        self.observe_password_prompt(offset=offset)
         await self.redraw()
 
     def render_text(self):
@@ -331,6 +347,7 @@ class InlineMessageEditor:
 
     async def cmd_ended(self, rc):
         self.rc = rc
+        self.last_activity = time.monotonic()
         self.waiting_password = False
         self._password_token = None
         self._auth_notice = ""
@@ -346,6 +363,9 @@ class TerminalMod(loader.Module):
     }
 
     COMMAND_PROTECT = "command_protect"
+    INLINE_PENDING_TTL = 5 * 60
+    INLINE_PENDING_LIMIT = 256
+    INLINE_IDLE_LIMIT = 64
     DANGEROUS_RM_TARGETS = {
         "/",
         "/bin",
@@ -484,7 +504,70 @@ class TerminalMod(loader.Module):
         )
         self.activecmds = {}
         self._inline_pending: dict[str, str] = {}
+        self._inline_pending_deadlines: dict[str, float] = {}
         self._inline_sessions: dict[str, InlineMessageEditor] = {}
+
+    def _prune_inline_pending(self):
+        now = time.monotonic()
+        for uid, deadline in list(self._inline_pending_deadlines.items()):
+            if deadline <= now or uid not in self._inline_pending:
+                self._inline_pending.pop(uid, None)
+                self._inline_pending_deadlines.pop(uid, None)
+        while len(self._inline_pending) > self.INLINE_PENDING_LIMIT:
+            uid = next(iter(self._inline_pending))
+            self._inline_pending.pop(uid, None)
+            self._inline_pending_deadlines.pop(uid, None)
+
+    def _remember_inline_command(self, uid: str, command: str):
+        self._inline_pending[uid] = command
+        self._inline_pending_deadlines[uid] = time.monotonic() + self.INLINE_PENDING_TTL
+        self._prune_inline_pending()
+
+    def _track_inline_session(self, uid: str, editor: InlineMessageEditor):
+        self._inline_sessions[uid] = editor
+        if uid in self.inline._units:
+            self.inline._units[uid]["on_unload"] = functools.partial(
+                self._drop_inline_session, uid
+            )
+
+    def _drop_inline_session(self, uid: str):
+        editor = self._inline_sessions.pop(uid, None)
+        if editor is not None:
+            editor.on_unload()
+            editor.form = None
+            editor.stdout = editor.stderr = ""
+            if editor.process is not None and editor.process.returncode is not None:
+                editor.process = None
+
+    @loader.loop(interval=60, autostart=True)
+    async def _cleanup_terminal_state(self):
+        self._prune_inline_pending()
+        idle = []
+        for uid, editor in list(self._inline_sessions.items()):
+            if uid not in self.inline._units:
+                self._drop_inline_session(uid)
+            elif editor.rc is not None:
+                idle.append((editor.last_activity, uid))
+        for _, uid in sorted(idle)[: max(len(idle) - self.INLINE_IDLE_LIMIT, 0)]:
+            await self.inline._unload_unit(uid)
+            self._drop_inline_session(uid)
+
+    async def on_unload(self):
+        self._inline_pending.clear()
+        self._inline_pending_deadlines.clear()
+        processes = set(self.activecmds.values())
+        processes.update(
+            editor.process
+            for editor in self._inline_sessions.values()
+            if editor.process is not None
+        )
+        self.activecmds.clear()
+        for uid in list(self._inline_sessions):
+            await self.inline._unload_unit(uid)
+            self._drop_inline_session(uid)
+        await asyncio.gather(
+            *(self._stop_process(process, stop_group=True) for process in processes)
+        )
 
     def _build_inline_exec_markup(
         self,
@@ -532,6 +615,7 @@ class TerminalMod(loader.Module):
             "top_msg_id": None,
             "uid": session_uid,
             "inline_message_id": inline_message_id,
+            "ttl": time.time() + self.inline._markup_ttl,
         }
 
     @loader.command(alias="exec")
@@ -605,7 +689,7 @@ class TerminalMod(loader.Module):
             return
 
         uid = utils.rand(8)
-        self._inline_pending[uid] = raw
+        self._remember_inline_command(uid, raw)
 
         await query.answer(
             [
@@ -631,7 +715,9 @@ class TerminalMod(loader.Module):
             return
 
         uid = call.data.split("/")[2]
+        self._prune_inline_pending()
         cmd = self._inline_pending.pop(uid, None)
+        self._inline_pending_deadlines.pop(uid, None)
 
         if not cmd:
             await call.answer("Command not found or already executed", show_alert=True)
@@ -654,8 +740,6 @@ class TerminalMod(loader.Module):
             inline_message_id=call.inline_message_id,
         )
 
-        await form.edit(self.strings["exec_running"])
-
         editor = InlineMessageEditor(
             form=form,
             command=cmd,
@@ -666,14 +750,24 @@ class TerminalMod(loader.Module):
                 uid,
             ),
         )
-        self._inline_sessions[uid] = editor
-
-        asyncio.ensure_future(self._run_inline(cmd, editor))
+        self._track_inline_session(uid, editor)
+        try:
+            await form.edit(self.strings["exec_running"])
+            self.create_task(self._run_inline(cmd, editor))
+        except BaseException:
+            await self.inline._unload_unit(uid)
+            self._drop_inline_session(uid)
+            raise
 
     async def inline__continue_input(self, call, query: str, session_uid: str):
         editor = self._inline_sessions.get(session_uid)
 
-        if not editor:
+        if (
+            not editor
+            or editor.rc is None
+            or editor.process is not None
+            or editor.form is None
+        ):
             return
 
         query = query.strip()
@@ -690,8 +784,58 @@ class TerminalMod(loader.Module):
             return
 
         editor.reset(cmd)
-        await editor.form.edit(self.strings["exec_running"])
-        asyncio.ensure_future(self._run_inline(cmd, editor))
+        try:
+            await editor.form.edit(self.strings["exec_running"])
+            self.create_task(self._run_inline(cmd, editor))
+        except BaseException:
+            await self.inline._unload_unit(session_uid)
+            self._drop_inline_session(session_uid)
+            raise
+
+    async def _read_process_output(self, process, editor):
+        try:
+            report_offset = "offset" in inspect.signature(editor.update_stderr).parameters
+        except (TypeError, ValueError):
+            report_offset = False
+        tasks = (
+            asyncio.create_task(
+                read_stream(
+                    editor.update_stdout,
+                    process.stdout,
+                    self.config["FLOOD_WAIT_PROTECT"],
+                )
+            ),
+            asyncio.create_task(
+                read_stream(
+                    editor.update_stderr,
+                    process.stderr,
+                    self.config["FLOOD_WAIT_PROTECT"],
+                    report_offset=report_offset,
+                )
+            ),
+        )
+        try:
+            await asyncio.gather(*tasks)
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _stop_process(self, process, *, stop_group=False):
+        if process.returncode is not None and not stop_group:
+            return
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGTERM)
+        try:
+            await asyncio.wait_for(process.wait(), timeout=2)
+        except asyncio.TimeoutError:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+            await asyncio.wait_for(process.wait(), timeout=5)
+        if stop_group:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
 
     async def _run_inline(self, cmd: str, editor: InlineMessageEditor):
         shell = os.environ.get("SHELL", "/bin/sh")
@@ -709,6 +853,8 @@ class TerminalMod(loader.Module):
                 preexec_fn=os.setsid,
             )
         except Exception as e:
+            editor.rc = 1
+            editor.last_activity = time.monotonic()
             with contextlib.suppress(Exception):
                 await editor.form.edit(
                     self.strings["exec_error"].format(utils.escape_html(str(e)))
@@ -716,22 +862,20 @@ class TerminalMod(loader.Module):
             return
 
         editor.update_process(sproc)
-        await editor.redraw()
-
-        await asyncio.gather(
-            read_stream(
-                editor.update_stdout,
-                sproc.stdout,
-                self.config["FLOOD_WAIT_PROTECT"],
-            ),
-            read_stream(
-                editor.update_stderr,
-                sproc.stderr,
-                self.config["FLOOD_WAIT_PROTECT"],
-            ),
-        )
-
-        await editor.cmd_ended(await sproc.wait())
+        finished = False
+        try:
+            await editor.redraw()
+            await self._read_process_output(sproc, editor)
+            await editor.cmd_ended(await sproc.wait())
+            finished = True
+        finally:
+            try:
+                await self._stop_process(sproc, stop_group=not finished)
+            finally:
+                editor.process = None
+                if editor.rc is None:
+                    editor.rc = sproc.returncode if sproc.returncode is not None else 1
+                    editor.last_activity = time.monotonic()
 
     async def run_command(
         self,
@@ -773,25 +917,31 @@ class TerminalMod(loader.Module):
 
         editor.update_process(sproc)
 
-        self.activecmds[hash_msg(message)] = sproc
-
-        await editor.redraw()
-
-        await asyncio.gather(
-            read_stream(
-                editor.update_stdout,
-                sproc.stdout,
-                self.config["FLOOD_WAIT_PROTECT"],
-            ),
-            read_stream(
-                editor.update_stderr,
-                sproc.stderr,
-                self.config["FLOOD_WAIT_PROTECT"],
-            ),
-        )
-
-        await editor.cmd_ended(await sproc.wait())
-        del self.activecmds[hash_msg(message)]
+        key = hash_msg(message)
+        self.activecmds[key] = sproc
+        finished = False
+        try:
+            await editor.redraw()
+            await self._read_process_output(sproc, editor)
+            await editor.cmd_ended(await sproc.wait())
+            finished = True
+        finally:
+            if self.activecmds.get(key) is sproc:
+                self.activecmds.pop(key, None)
+            try:
+                await self._stop_process(sproc, stop_group=not finished)
+            finally:
+                editor.process = None
+                inline_editor = getattr(editor, "inline_editor", None)
+                if inline_editor is not None:
+                    inline_editor.process = None
+                    if inline_editor.rc is None:
+                        inline_editor.rc = (
+                            sproc.returncode if sproc.returncode is not None else 1
+                        )
+                        inline_editor.last_activity = time.monotonic()
+                        inline_editor.waiting_password = False
+                        inline_editor._password_token = None
 
     def _find_inline_editor_by_message(
         self,

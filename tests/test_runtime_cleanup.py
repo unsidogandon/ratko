@@ -391,6 +391,7 @@ class InlineLifecycleTest(unittest.IsolatedAsyncioTestCase):
         self.namespace = {
             "time": self.clock,
             "inspect": inspect,
+            "asyncio": asyncio,
             "functools": functools,
             "logger": Mock(),
             "utils": SimpleNamespace(

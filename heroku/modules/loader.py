@@ -17,6 +17,7 @@ import asyncio
 import contextlib
 import difflib
 import functools
+import hashlib
 import importlib
 import inspect
 import io
@@ -27,7 +28,6 @@ import shutil
 import sys
 import time
 import typing
-import uuid
 from collections import ChainMap
 from importlib.machinery import ModuleSpec
 from urllib.parse import urlparse
@@ -729,6 +729,30 @@ class LoaderMod(loader.Module):
             logger.exception("install_packages failed")
             return False
 
+    @staticmethod
+    def _get_module_uid(doc: str) -> str:
+        """Recognize both Module and loader.Module; keep fallback names stable."""
+        try:
+            tree = ast.parse(doc)
+            names = {"Module"}
+            for node in tree.body:
+                if isinstance(node, ast.ImportFrom):
+                    names.update(
+                        alias.asname or alias.name
+                        for alias in node.names
+                        if alias.name == "Module"
+                    )
+            for node in tree.body:
+                if isinstance(node, ast.ClassDef) and any(
+                    isinstance(base, ast.Name) and base.id in names
+                    or isinstance(base, ast.Attribute) and base.attr == "Module"
+                    for base in node.bases
+                ):
+                    return node.name
+        except SyntaxError:
+            pass
+        return "__extmod_" + hashlib.sha256(doc.encode("utf-8")).hexdigest()[:24]
+
     async def load_module(
         self,
         doc: str,
@@ -877,26 +901,7 @@ class LoaderMod(loader.Module):
         blob_link = self.strings["blob_link"] if blob_link else ""
 
         if name is None:
-            try:
-                node = ast.parse(doc)
-                uid = next(
-                    n.name
-                    for n in node.body
-                    if isinstance(n, ast.ClassDef)
-                    and any(
-                        isinstance(base, ast.Attribute)
-                        and base.value.id == "Module"
-                        or isinstance(base, ast.Name)
-                        and base.id == "Module"
-                        for base in n.bases
-                    )
-                )
-            except Exception:
-                logger.debug(
-                    "Can't parse classname from code, using legacy uid instead",
-                    exc_info=True,
-                )
-                uid = "__extmod_" + str(uuid.uuid4())
+            uid = self._get_module_uid(doc)
         else:
             if name.startswith(self.config["MODULES_REPO"]):
                 name = name.split("/")[-1].split(".py")[0]
@@ -912,6 +917,8 @@ class LoaderMod(loader.Module):
         async def core_overwrite(e: CoreOverwriteError):
             nonlocal message
 
+            with contextlib.suppress(Exception):
+                await self.allmodules._shutdown_module(instance, "failed installation")
             with contextlib.suppress(Exception):
                 self.allmodules.modules.remove(instance)
 
@@ -1082,12 +1089,15 @@ class LoaderMod(loader.Module):
                         await asyncio.sleep(0.1)
 
                 task = asyncio.ensure_future(inner_proxy())
-                await self.allmodules.send_ready_one(
-                    instance,
-                    no_self_unload=True,
-                    from_dlmod=bool(message),
-                )
-                task.cancel()
+                try:
+                    await self.allmodules.send_ready_one(
+                        instance,
+                        no_self_unload=True,
+                        from_dlmod=bool(message),
+                    )
+                finally:
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
             except CoreOverwriteError as e:
                 logger.error(
                     "Module %s tried to overwrite core %s %s during ready stage",
@@ -1165,7 +1175,15 @@ class LoaderMod(loader.Module):
                         ),
                     )
                 return False
+        except asyncio.CancelledError:
+            if instance in self.allmodules.modules:
+                self.allmodules.modules.remove(instance)
+            await self.allmodules._shutdown_module(instance, "cancelled installation")
+            raise
         except Exception as e:
+            if instance in self.allmodules.modules:
+                self.allmodules.modules.remove(instance)
+            await self.allmodules._shutdown_module(instance, "failed installation")
             logger.exception("Module threw because of %s", e)
 
             if message is not None:
@@ -1181,24 +1199,6 @@ class LoaderMod(loader.Module):
             ),
             None,
         )
-
-        pack_url = next(
-            (
-                line.replace(" ", "").split("#packurl:", maxsplit=1)[1]
-                for line in doc.splitlines()
-                if line.replace(" ", "").startswith("#packurl:")
-            ),
-            None,
-        )
-
-        if pack_url and (
-            transations := await self.allmodules.translator.load_module_translations(
-                pack_url,
-                loader.MODULES_LANGPACKS_PATH
-                / f"{self.client.tg_id}_{instance.__class__.__name__}.yml",
-            )
-        ):
-            instance.strings.external_strings = transations
 
         for alias, cmd in self.lookup("settings").get("aliases", {}).items():
             _cmd = cmd.split(maxsplit=1)

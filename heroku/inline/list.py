@@ -169,6 +169,7 @@ class List(InlineUnit):
         btn_call_data = utils.rand(10)
 
         self._custom_map[btn_call_data] = {
+            "unit_id": unit_id,
             "handler": functools.partial(
                 self._list_page,
                 unit_id=unit_id,
@@ -215,14 +216,17 @@ class List(InlineUnit):
 
         try:
             m = await self._invoke_unit(unit_id, message)
+        except asyncio.CancelledError:
+            await self._unload_unit(unit_id)
+            raise
         except ChatSendInlineForbiddenError:
+            await self._unload_unit(unit_id)
             await answer(self.translator.getkey("inline.inline403"))
-            del self._units[unit_id]
             return False
         except Exception:
             logger.exception("Can't send list")
 
-            del self._units[unit_id]
+            await self._unload_unit(unit_id)
             await answer(
                 self.translator.getkey("inline.invoke_failed_logs").format(
                     utils.escape_html(
@@ -235,8 +239,8 @@ class List(InlineUnit):
 
             return False
 
-        await self._units[unit_id]["future"].wait()
-        del self._units[unit_id]["future"]
+        if not await self._wait_for_unit(unit_id):
+            return False
 
         self._units[unit_id]["chat"] = utils.get_chat_id(m)
         self._units[unit_id]["message_id"] = m.id
