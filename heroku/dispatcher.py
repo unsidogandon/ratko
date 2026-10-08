@@ -739,7 +739,18 @@ class CommandDispatcher:
         # Will be used to determine, which client caused logging messages
         # parsed via inspect.stack()
         _heroku_client_id_logging_tag = copy.copy(self.client.tg_id)  # noqa: F841
+
+        module = getattr(func, "__self__", None)
+        if module is not None:
+            if getattr(module, "_unloading", False):
+                return
+            if "_managed_tasks" not in module.__dict__:
+                module._managed_tasks = set()
+            module._managed_tasks.add(asyncio.current_task())
         try:
             await func(message)
         except Exception as e:
             await exception_handler(e, message, *args)
+        finally:
+            if module is not None:
+                module._managed_tasks.discard(asyncio.current_task())

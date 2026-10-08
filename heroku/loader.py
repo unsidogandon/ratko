@@ -26,7 +26,7 @@ import os
 import re
 import sys
 import typing
-from functools import wraps
+from functools import partial, wraps
 from pathlib import Path
 from types import FunctionType
 from uuid import uuid4
@@ -207,9 +207,15 @@ class InfiniteLoop:
         self._wait_before = wait_before
         self._stop_clause = stop_clause
         self.autostart = autostart
+        self._wait_for_stop = asyncio.Event()
 
-    def _stop(self, *args, **kwargs):
-        self._wait_for_stop.set()
+    def _stop(self, task):
+        if self._task is task:
+            self._task = None
+            self.status = False
+            self._wait_for_stop.set()
+        if not task.cancelled():
+            task.exception()
 
     def stop(self, *args, **kwargs):
         with contextlib.suppress(AttributeError):
@@ -217,15 +223,12 @@ class InfiniteLoop:
                 self.module_instance.allmodules.client.tg_id
             )
 
-        if self._task:
-            logger.debug("Stopped loop for method %s", self.func)
-            self._wait_for_stop = asyncio.Event()
-            self.status = False
-            self._task.add_done_callback(self._stop)
-            self._task.cancel()
+        self.status = False
+        task = self._task
+        if task and not task.done() and task is not asyncio.current_task():
+            task.cancel()
             return asyncio.ensure_future(self._wait_for_stop.wait())
 
-        logger.debug("Loop is not running")
         return asyncio.ensure_future(stop_placeholder())
 
     def start(self, *args, **kwargs):
@@ -234,11 +237,13 @@ class InfiniteLoop:
                 self.module_instance.allmodules.client.tg_id
             )
 
-        if not self._task:
-            logger.debug("Started loop for method %s", self.func)
+        if getattr(self.module_instance, "_unloading", False):
+            return
+
+        if self._task is None:
+            self._wait_for_stop.clear()
             self._task = asyncio.ensure_future(self.actual_loop(*args, **kwargs))
-        else:
-            logger.debug("Attempted to start already running loop")
+            self._task.add_done_callback(self._stop)
 
     async def actual_loop(self, *args, **kwargs):
         # Wait for loader to set attribute
@@ -268,15 +273,16 @@ class InfiniteLoop:
             except Exception:
                 logger.exception("Error running loop!")
 
+            if not self.status:
+                break
+
             if not self._wait_before:
                 await asyncio.sleep(self.interval)
 
-        self._wait_for_stop.set()
-
-        self.status = False
-
     def __del__(self):
-        self.stop()
+        if self._task and not self._task.done():
+            with contextlib.suppress(RuntimeError):
+                self._task.cancel()
 
 
 def loop(
@@ -970,6 +976,28 @@ class Modules:
                     purpose,
                 )
 
+        def owned(handler):
+            while isinstance(handler, partial):
+                handler = handler.func
+            return getattr(handler, "__self__", None) is instance
+
+        for key, entry in list(getattr(self.inline, "_custom_map", {}).items()):
+            if owned(entry.get("handler")):
+                del self.inline._custom_map[key]
+
+        for unit in getattr(self.inline, "_units", {}).values():
+            unit["buttons"] = [
+                [
+                    button
+                    for button in row
+                    if not owned(button.get("callback"))
+                    and not owned(button.get("handler"))
+                ]
+                for row in unit.get("buttons", [])
+            ]
+            if owned(unit.get("on_unload")):
+                unit.pop("on_unload")
+
     def register_watchers(self, instance: Module):
         """Register watcher from instance"""
         with contextlib.suppress(AttributeError):
@@ -1032,14 +1060,6 @@ class Modules:
         return set(prefixes)
 
     @staticmethod
-    async def _call_on_unload(module: Module):
-        try:
-            result = module.on_unload()
-            if inspect.isawaitable(result):
-                await result
-        except Exception:
-            logger.exception("Module %s failed during unload", module.__class__.__name__)
-
     async def complete_registration(self, instance: Module):
         """Complete registration of instance"""
         with contextlib.suppress(AttributeError):
@@ -1062,24 +1082,9 @@ class Modules:
                     )
 
                 logger.debug("Removing module %s for update", module)
-                await self._call_on_unload(module)
-
-                self.unregister_raw_handlers(module, "update")
-                self.unregister_bot_update_handlers(module, "update")
-                self.unregister_loops(module, "update")
-                self.unregister_commands(module, "update")
-                self.unregister_watchers(module, "update")
-                self.unregister_inline_stuff(module, "update")
-
-                self.modules.remove(module)
-                for _, method in utils.iter_attrs(module):
-                    if isinstance(method, InfiniteLoop):
-                        method.stop()
-                        logger.debug(
-                            "Stopped loop in module %s, method %s",
-                            module,
-                            method,
-                        )
+                await self._shutdown_module(module, "update")
+                if module in self.modules:
+                    self.modules.remove(module)
 
         self.modules += [instance]
 
@@ -1252,7 +1257,9 @@ class Modules:
                 raise e
 
             logger.debug("Unloading %s, because it raised SelfUnload", mod)
-            self.modules.remove(mod)
+            await self._shutdown_module(mod, "failed initialization")
+            if mod in self.modules:
+                self.modules.remove(mod)
             return
         except SelfSuspend as e:
             if no_self_unload:
@@ -1269,7 +1276,9 @@ class Modules:
                 mod,
                 e,
             )
-            self.modules.remove(mod)
+            await self._shutdown_module(mod, "failed initialization")
+            if mod in self.modules:
+                self.modules.remove(mod)
             raise
 
         # Check for pack_url and load translations
@@ -1327,7 +1336,7 @@ class Modules:
         with contextlib.suppress(AttributeError):
             _heroku_client_id_logging_tag = copy.copy(self.client.tg_id)  # noqa: F841
 
-        for module in self.modules:
+        for module in self.modules.copy():
             if classname.lower() in (
                 module.name.lower(),
                 module.__class__.__name__.lower(),
@@ -1352,17 +1361,88 @@ class Modules:
                 logger.debug("Removing module %s for unload", module)
                 self.modules.remove(module)
 
-                await self._call_on_unload(module)
-
-                self.unregister_raw_handlers(module, "unload")
-                self.unregister_bot_update_handlers(module, "unload")
-                self.unregister_loops(module, "unload")
-                self.unregister_commands(module, "unload")
-                self.unregister_watchers(module, "unload")
-                self.unregister_inline_stuff(module, "unload")
+                await self._shutdown_module(module, "unload")
 
         logger.debug("Worked: %s", worked)
         return worked
+
+    async def _shutdown_module(self, module: Module, purpose: str):
+        existing = getattr(module, "_shutdown_task", None)
+        if existing is None:
+            module._unloading = True
+            caller = asyncio.current_task()
+            existing = asyncio.create_task(
+                self._finish_shutdown(module, purpose, caller)
+            )
+            module._shutdown_task = existing
+        await asyncio.shield(existing)
+
+    async def _wait_module_tasks(self, tasks, module, phase):
+        if not tasks:
+            return
+        done, pending = await asyncio.wait(tasks, timeout=5)
+        for task in done:
+            if not task.cancelled():
+                error = task.exception()
+                if error is not None:
+                    logger.error(
+                        "Module %s failed during %s",
+                        module,
+                        phase,
+                        exc_info=(type(error), error, error.__traceback__),
+                    )
+        for task in pending:
+            task.cancel()
+            task.add_done_callback(self._consume_shutdown_result)
+        if pending:
+            logger.warning(
+                "Module %s: %s timed out (%s tasks)",
+                module,
+                phase,
+                len(pending),
+            )
+
+    @staticmethod
+    def _consume_shutdown_result(task):
+        if not task.cancelled():
+            task.exception()
+
+    async def _finish_shutdown(self, module: Module, purpose: str, caller):
+        for unregister in (
+            self.unregister_raw_handlers,
+            self.unregister_bot_update_handlers,
+            self.unregister_commands,
+            self.unregister_watchers,
+            self.unregister_inline_stuff,
+        ):
+            try:
+                unregister(module, purpose)
+            except Exception:
+                logger.exception(
+                    "Unable to unregister %s for %s",
+                    unregister.__name__,
+                    module,
+                )
+
+        tasks = set(getattr(module, "_managed_tasks", ()))
+        for _, method in utils.iter_attrs(module):
+            if isinstance(method, InfiniteLoop):
+                method.status = False
+                if method._task is not None:
+                    tasks.add(method._task)
+        tasks.discard(caller)
+        tasks.discard(asyncio.current_task())
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await self._wait_module_tasks(tasks, module, "task cancellation")
+
+        async def unload():
+            await module.on_unload()
+
+        await self._wait_module_tasks(
+            {asyncio.create_task(unload())}, module, "on_unload"
+        )
 
     def unregister_loops(self, instance: Module, purpose: str):
         for name, method in utils.iter_attrs(instance):
@@ -1386,7 +1466,7 @@ class Modules:
                 )
                 del self.commands[name]
                 for alias, _command in self.aliases.copy().items():
-                    if _command == name:
+                    if purpose != "update" and _command.split()[0].lower() == name:
                         del self.aliases[alias]
 
     def unregister_watchers(self, instance: Module, purpose: str):

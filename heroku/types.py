@@ -138,6 +138,18 @@ class Module:
         self.tg_id: int = self._client.tg_id
         self._tg_id: int = self._client.tg_id
 
+    def create_task(self, coroutine, *, name=None):
+        """Create a task, which is tracked by the module shutdown machinery"""
+        if getattr(self, "_unloading", False):
+            coroutine.close()
+            raise RuntimeError("Module is unloading")
+        if "_managed_tasks" not in self.__dict__:
+            self._managed_tasks = set()
+        task = asyncio.create_task(coroutine, name=name)
+        self._managed_tasks.add(task)
+        task.add_done_callback(self._managed_tasks.discard)
+        return task
+
     async def on_unload(self):
         """Called after unloading / reloading module"""
 
