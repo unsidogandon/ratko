@@ -1059,7 +1059,6 @@ class Modules:
 
         return set(prefixes)
 
-    @staticmethod
     async def complete_registration(self, instance: Module):
         """Complete registration of instance"""
         with contextlib.suppress(AttributeError):
