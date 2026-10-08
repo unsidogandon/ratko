@@ -1,5 +1,9 @@
 heroku_security:
   name: "RatkoSecurity"
+  owner_prefix_invalid: "<tg-emoji emoji-id=5121063440311386962>❌</tg-emoji> <b>ValueError: each prefix must be one non-whitespace character other than s; enable allow_nonstandart_prefixes for longer values.</b>"
+  owneradd_usage: "<tg-emoji emoji-id=5870609858520158157>ℹ</tg-emoji> <b>Usage:</b> <code>owneradd [uid or reply] [-f] [-n] [-p prefix]...</code>"
+  owner_prefix: "<tg-emoji emoji-id=5873204392429096339>⌨</tg-emoji> <b>user.command_prefix:</b> <code>{}</code>"
+  owner_exists: "<tg-emoji emoji-id=\"5872988737826197458\">⛔</tg-emoji> <b>usermod: <a href=\"tg://user?id={}\">{}</a> already belongs to group owner (EEXIST).</b>"
   invalid_name: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>SyntaxError: Invalid identifier regex</b>"
   no_command: "🚫 <b>/bin/sh:</b> <code>{}</code> <b>: command not found</b>"
   permissions: "🔐 <b>chmod +x for</b> <code>{}{}</code>"
@@ -62,7 +66,7 @@ heroku_security:
   seconds: "s"
   _cmd_doc_inlinesec: "[bin] - Config inline chmod"
   _cmd_doc_querysec: "Toggle inline query exec permission for external users"
-  _cmd_doc_owneradd: "[-f|--force] [-n|--nonick] <uid> - usermod -aG sudo"
+  _cmd_doc_owneradd: "[-f|--force] [-n|--nonick] [-p prefix]... <uid> - usermod -aG sudo"
   _cmd_doc_ownerlist: "cat /etc/sudoers"
   _cmd_doc_ownerrm: "<uid> - deluser sudo"
   _cmd_doc_security: "[bin] - Config binary chmod"
@@ -190,6 +194,10 @@ terminal:
   exec_running: "<b>Executing command with sudo privileges...</b>"
   btn_execute: "Execute (as root)"
   btn_continue: "Continue input"
+  btn_input_password: "input password"
+  sudo_password_input: "Write sudo password to stdin"
+  sudo_password_required: "<b>sudo: awaiting password on stdin.</b>"
+  sudo_password_retry: "<b>sudo: retry password input.</b>"
   inline_hint: "Execution"
   inline_hint_desc: "I use arch btw"
 
@@ -653,6 +661,7 @@ loader:
   installed_all_from_repo: "<tg-emoji emoji-id=5429092129638980960>🪐</tg-emoji> <b>All modules from repository installed successfully! (no errors, chad moment)</b>"
   dlm_all_from_repo_error_nomods: "<tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>No modules found in this repository! RTFM or gtfo, normie.</b>"
   dlm_all_from_repo_error_somemods: "<tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>Some modules failed to install:</b>\n"
+  rich_mode_doc: "Rich Mode for messages in loader"
   show_banner_doc: "Show # meta banner like preview? (y/N)"
 
   '404': <tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Module lookup returned 404</b>
@@ -790,3 +799,10 @@ heroku_plugin_security:
   no_hash: <tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Module name required</b>
   hash_not_found: <tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Module lookup returned null</b>
   hash_not_found_suggest: <tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>No exact hit. Closest symbol:</b> <code>{}</code>
+
+command_conflicts:
+  choose: "<tg-emoji emoji-id=5870982283724328568>⚙</tg-emoji> Ambiguous command <code>{}</code>. Select a module to dispatch:"
+  denied: "PermissionError: only the command author can select a handler."
+  used: "Handler already selected. Duplicate dispatch blocked."
+  unavailable: "<tg-emoji emoji-id=5870657884844462243>❌</tg-emoji> LookupError: command handler no longer available."
+  failed: "<tg-emoji emoji-id=5870931487146119264>❗</tg-emoji> InlineError: cannot render module selector. Check the inline bot."

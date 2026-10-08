@@ -1,4 +1,8 @@
 heroku_security:
+  owner_prefix_invalid: "<tg-emoji emoji-id=5121063440311386962>❌</tg-emoji> <b>Кожен префікс — один символ без пробілів, крім s; для довгих увімкни нестандартні префікси.</b>"
+  owneradd_usage: "<tg-emoji emoji-id=5870609858520158157>ℹ</tg-emoji> <b>Використання:</b> <code>owneradd [користувач або відповідь] [-f] [-n] [-p префікс]...</code>"
+  owner_prefix: "<tg-emoji emoji-id=5873204392429096339>⌨</tg-emoji> <b>Персональний префікс:</b> <code>{}</code>"
+  owner_exists: "<tg-emoji emoji-id=\"5872988737826197458\">⛔</tg-emoji> <b>Неможливо додати: <a href=\"tg://user?id={}\">{}</a> уже є у списку власників.</b>"
   invalid_name: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Неправильне ім'я</b>"
   no_command: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Команда</b> <code>{}</code> <b>не знайдена!</b>"
   permissions: "🔐 <b>Тут можна налаштувати дозволи для команди</b> <code>{}{}</code>"
@@ -58,7 +62,7 @@ heroku_security:
   seconds: "секунд(-и)"
   _cmd_doc_inlinesec: "[команда] - Налаштувати дозволи для інлайн команди"
   _cmd_doc_querysec: "Перемкнути дозвіл на виконання інлайн-запитів для сторонніх користувачів"
-  _cmd_doc_owneradd: "[-f|--force] [-n|--nonick] <користувач> - Додати користувача до групи `owner`"
+  _cmd_doc_owneradd: "[-f|--force] [-n|--nonick] [-p prefix]... <користувач> - Додати користувача до групи `owner`"
   _cmd_doc_ownerlist: "Показати список користувачів у групі `owner`"
   _cmd_doc_ownerrm: "<користувач> - Видалити користувача з групи `owner`"
   _cmd_doc_security: "[команда] - Налаштувати дозволи для команди"
@@ -181,6 +185,10 @@ terminal:
   exec_running: "<b>Виконую...</b>"
   btn_execute: "Виконати"
   btn_continue: "Продовжити введення"
+  btn_input_password: "Ввести пароль"
+  sudo_password_input: "Передати пароль sudo"
+  sudo_password_required: "<b>sudo: потрібен пароль.</b>"
+  sudo_password_retry: "<b>sudo: введіть пароль повторно.</b>"
   inline_hint: "Terminal"
   inline_hint_desc: "Почніть вводити команду"
 
@@ -636,6 +644,7 @@ loader:
   installed_all_from_repo: "<tg-emoji emoji-id=5429092129638980960>🪐</tg-emoji> <b>Всі модулі з репозиторію успішно встановлено!</b>"
   dlm_all_from_repo_error_nomods: "<tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>У цьому репозиторії не знайдено жодного модуля!</b>"
   dlm_all_from_repo_error_somemods: "<tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>Деякі модулі не вдалося встановити:</b>\n"
+  rich_mode_doc: "Режим Rich для повідомлень у завантажувачі"
   show_banner_doc: "Показати прев'ю мета-банера?"
 
   name: Loader
@@ -774,3 +783,10 @@ heroku_plugin_security:
   no_hash: <tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Вкажи назву модуля</b>
   hash_not_found: <tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Модуль із такою назвою не знайдено</b>
   hash_not_found_suggest: <tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>Збігів немає. Найближче:</b> <code>{}</code>
+
+command_conflicts:
+  choose: "<tg-emoji emoji-id=5870982283724328568>⚙</tg-emoji> Вибери модуль для <code>{}</code>:"
+  denied: "Вибирати може лише автор команди."
+  used: "Команду вже вибрано."
+  unavailable: "<tg-emoji emoji-id=5870657884844462243>❌</tg-emoji> Команда більше недоступна."
+  failed: "<tg-emoji emoji-id=5870931487146119264>❗</tg-emoji> Не вдалося показати вибір модуля. Перевір інлайн-бота."

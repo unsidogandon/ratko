@@ -1,4 +1,8 @@
 heroku_security:
+  owner_exists: "<tg-emoji emoji-id=\"5872988737826197458\">⛔</tg-emoji> <b>Нельзя добавить: <a href=\"tg://user?id={}\">{}</a> уже есть в списке овнеров.</b>"
+  owner_prefix: "<tg-emoji emoji-id=5873204392429096339>⌨</tg-emoji> <b>Персональный префикс:</b> <code>{}</code>"
+  owneradd_usage: "<tg-emoji emoji-id=5870609858520158157>ℹ</tg-emoji> <b>Использование:</b> <code>owneradd [пользователь или ответ] [-f] [-n] [-p префикс]...</code>"
+  owner_prefix_invalid: "<tg-emoji emoji-id=5121063440311386962>❌</tg-emoji> <b>Каждый префикс — один символ без пробелов, кроме s; для длинных включи нестандартные префиксы.</b>"
   invalid_name: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Неправильное имя</b>"
   no_command: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Команда</b> <code>{}</code> <b>не найдена!</b>"
   permissions: "🔐 <b>Здесь можно настроить разрешения для команды</b> <code>{}{}</code>"
@@ -58,7 +62,7 @@ heroku_security:
   seconds: "секунд(-ы)"
   _cmd_doc_inlinesec: "[команда] - Настроить разрешения для инлайн команды"
   _cmd_doc_querysec: "Переключить разрешение на выполнение инлайн запросов для сторонних пользователей"
-  _cmd_doc_owneradd: "[-f|--force] [-n|--nonick] <пользователь> - Добавить пользователя в группу `owner`"
+  _cmd_doc_owneradd: "[-f|--force] [-n|--nonick] [-p prefix]... <пользователь> - Добавить пользователя в группу `owner`"
   _cmd_doc_ownerlist: "Показать список пользователей в группе `owner`"
   _cmd_doc_ownerrm: "<пользователь> - Удалить пользователя из группы `owner`"
   _cmd_doc_security: "[команда] - Настроить разрешения для команды"
@@ -181,6 +185,10 @@ terminal:
   exec_running: "<b>Выполняю...</b>"
   btn_execute: "Выполнить"
   btn_continue: "Продолжить ввод"
+  btn_input_password: "Ввести пароль"
+  sudo_password_input: "Передать пароль sudo"
+  sudo_password_required: "<b>sudo: требуется пароль.</b>"
+  sudo_password_retry: "<b>sudo: введите пароль повторно.</b>"
   inline_hint: "Terminal"
   inline_hint_desc: "Начните вводить команду"
 
@@ -656,6 +664,7 @@ loader:
   installed_all_from_repo: "<tg-emoji emoji-id=5429092129638980960>🪐</tg-emoji> <b>Все модули из репозитория успешно установлены!</b>"
   dlm_all_from_repo_error_nomods: "<tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>В этом репозитории не найдено ни одного модуля!</b>"
   dlm_all_from_repo_error_somemods: "<tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>Не удалось установить некоторые модули:</b>\n"
+  rich_mode_doc: "Режим Rich для сообщений в загрузчике"
   show_banner_doc: "Показать мета-баннера как превью ?"
 
   name: Loader
@@ -785,3 +794,10 @@ $inline:
   button403: "Вы не можете нажать на эту кнопку!"
   keep_id: "⚠️ Не удаляйте ID! {}"
   no_query_results: "<tg-emoji emoji-id=5440660757194744323>‼️</tg-emoji> <b>Не удалось создать форму</b>\n\nВозможные способы исправления ошибки:\n\n1. Перезагрузите Ratko: <code>{prefix}restart</code>\n\n2. Включите inline-режим для бота: перейдите в @BotFather, отправьте /mybots, нажмите Bot Settings -> Inline Mode -> On\n\n3. Создайте нового бота: отправьте команду <code>{prefix}ch_ratko_bot</code> <@имя_бота>"
+
+command_conflicts:
+  choose: "<tg-emoji emoji-id=5870982283724328568>⚙</tg-emoji> Выбери модуль для <code>{}</code>:"
+  denied: "Выбирать может только автор команды."
+  used: "Команда уже выбрана."
+  unavailable: "<tg-emoji emoji-id=5870657884844462243>❌</tg-emoji> Команда больше недоступна."
+  failed: "<tg-emoji emoji-id=5870931487146119264>❗</tg-emoji> Не удалось показать выбор модуля. Проверь инлайн-бота."

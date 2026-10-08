@@ -1,5 +1,9 @@
 heroku_security:
   name: "RatkoSecurity"
+  owner_exists: "<tg-emoji emoji-id=\"5872988737826197458\">⛔</tg-emoji> <b>Cannot add: <a href=\"tg://user?id={}\">{}</a> is already an owner.</b>"
+  owner_prefix: "<tg-emoji emoji-id=5873204392429096339>⌨</tg-emoji> <b>Personal prefix:</b> <code>{}</code>"
+  owneradd_usage: "<tg-emoji emoji-id=5870609858520158157>ℹ</tg-emoji> <b>Usage:</b> <code>owneradd [user or reply] [-f] [-n] [-p prefix]...</code>"
+  owner_prefix_invalid: "<tg-emoji emoji-id=5121063440311386962>❌</tg-emoji> <b>Each prefix must be one character without whitespace, except s; enable nonstandard prefixes for longer values.</b>"
   invalid_name: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Invalid security group name</b>"
   no_command: "🚫 <b>Command</b> <code>{}</code> <b>not found!</b>"
   permissions: "🔐 <b>Here you can configure permissions for</b> <code>{}{}</code>"
@@ -62,7 +66,7 @@ heroku_security:
   seconds: "seconds"
   _cmd_doc_inlinesec: "[command] - Configure inline command's security settings"
   _cmd_doc_querysec: "Toggle permission to execute inline queries for external users"
-  _cmd_doc_owneradd: "[-f|--force] [-n|--nonick] <user> - Add user to `owner`"
+  _cmd_doc_owneradd: "[-f|--force] [-n|--nonick] [-p prefix]... <user> - Add user to `owner`"
   _cmd_doc_ownerlist: "List users in `owner`"
   _cmd_doc_ownerrm: "<user> - Remove user from `owner`"
   _cmd_doc_security: "[command] - Configure command's security settings"
@@ -224,6 +228,10 @@ terminal:
   exec_running: "<b>Executing...</b>"
   btn_execute: "Execute"
   btn_continue: "Continue input"
+  btn_input_password: "input password"
+  sudo_password_input: "Submit sudo password"
+  sudo_password_required: "<b>sudo: password required.</b>"
+  sudo_password_retry: "<b>sudo: enter the password again.</b>"
   inline_hint: "Terminal"
   inline_hint_desc: "Start typing a command"
 
@@ -687,6 +695,7 @@ loader:
   installed_all_from_repo: "<tg-emoji emoji-id=5429092129638980960>🪐</tg-emoji> <b>All modules from repository installed successfully!</b>"
   dlm_all_from_repo_error_nomods: "<tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>No modules found in this repository!</b>"
   dlm_all_from_repo_error_somemods: "<tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>Some modules failed to install:</b>\n"
+  rich_mode_doc: "Rich Mode for messages in loader"
   show_banner_doc: "Show # meta banner like preview?"
 
   '404': <tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Module not found</b>
@@ -814,3 +823,10 @@ $inline:
   button403: "You are not allowed to press this button!"
   keep_id: "⚠️ Do not remove ID! {}"
   no_query_results: "<tg-emoji emoji-id=5440660757194744323>‼️</tg-emoji> <b>Failed to create form</b>\n\nPossible ways to fix the error:\n\n1. Restart Ratko: <code>{prefix}restart</code>\n\n2. Enable inline mode for the bot: go to @BotFather, send /mybots, click Bot Settings -> Inline Mode -> On\n\n3. Create a new bot: send the command <code>{prefix}ch_ratko_bot</code> <@botname>"
+
+command_conflicts:
+  choose: "<tg-emoji emoji-id=5870982283724328568>⚙</tg-emoji> Choose a module for <code>{}</code>:"
+  denied: "Only the command author can choose."
+  used: "This command has already been selected."
+  unavailable: "<tg-emoji emoji-id=5870657884844462243>❌</tg-emoji> The command is no longer available."
+  failed: "<tg-emoji emoji-id=5870931487146119264>❗</tg-emoji> Cannot show module selection. Check the inline bot."

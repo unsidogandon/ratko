@@ -1,5 +1,9 @@
 heroku_security:
   name: "HerokuSecuwity"
+  owner_prefix_invalid: "<tg-emoji emoji-id=5121063440311386962>❌</tg-emoji> <b>Each pwefix must be one chawactew without spaces, except s; enabwe nonstandawd pwefixes fow wongew vawues.</b>"
+  owneradd_usage: "<tg-emoji emoji-id=5870609858520158157>ℹ</tg-emoji> <b>Usage:</b> <code>owneradd [usew ow wepwy] [-f] [-n] [-p pwefix]...</code>"
+  owner_prefix: "<tg-emoji emoji-id=5873204392429096339>⌨</tg-emoji> <b>Pewsonaw pwefix:</b> <code>{}</code>"
+  owner_exists: "<tg-emoji emoji-id=\"5872988737826197458\">⛔</tg-emoji> <b>Cannyot add: <a href=\"tg://user?id={}\">{}</a> is awweady an ownew! UwU</b>"
   invalid_name: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Invawid secuwity gwoup nyame >w<</b>"
   no_command: "🚫 <b>Command</b> <code>{}</code> <b>nyot found! UwU</b>"
   permissions: "🔐 <b>Hewe you can configuwe pewmissions fow</b> <code>{}{}</code> :3"
@@ -62,7 +66,7 @@ heroku_security:
   seconds: "seconds"
   _cmd_doc_inlinesec: "[command] - Configuwe inwine command's secuwity settings"
   _cmd_doc_querysec: "Toggwe permission to execute inwine queries fow extewnal usews"
-  _cmd_doc_owneradd: "[-f|--force] [-n|--nonick] <user> - Add usew to `owner`"
+  _cmd_doc_owneradd: "[-f|--force] [-n|--nonick] [-p prefix]... <user> - Add usew to `owner`"
   _cmd_doc_ownerlist: "Wist usews in `owner`"
   _cmd_doc_ownerrm: "<user> - Wemove usew fwom `owner`"
   _cmd_doc_security: "[command] - Configuwe command's secuwity settings"
@@ -190,6 +194,10 @@ terminal:
   exec_running: "<b>Exekyuting... nyaa~ >w<</b>"
   btn_execute: "Exekyute pwease~ :3"
   btn_continue: "Keep typing pwease~ :3"
+  btn_input_password: "Input passwowd :3"
+  sudo_password_input: "Submit sudo passwowd, pwease~"
+  sudo_password_required: "<b>sudo: passwowd wequiwed, pwease~</b>"
+  sudo_password_retry: "<b>sudo: entew da passwowd again, pwease~</b>"
   inline_hint: "Tewminaw"
   inline_hint_desc: "Stawt typing a command, senpai OwO"
 
@@ -652,6 +660,7 @@ loader:
   installed_all_from_repo: "<tg-emoji emoji-id=5429092129638980960>🪐</tg-emoji> <b>Aww moduwes fwom wepositowy instawwed successfuwwy! OwO yippee~</b>"
   dlm_all_from_repo_error_nomods: "<tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>Nyooo moduwes found in dis wepositowy! >///< Awe you suwe, mastew?</b>"
   dlm_all_from_repo_error_somemods: "<tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>Some moduwes faiwed to instaww... sowwy senpai :c</b>\n"
+  rich_mode_doc: "Rich Mode fow messages in woadew"
   show_banner_doc: "Show # meta bannyew wike pweview? Pwease? :3"
 
   '404': <tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Moduwe nyot found >w<</b>
@@ -788,3 +797,10 @@ heroku_plugin_security:
   no_hash: <tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>You must specify a moduwe name</b>
   hash_not_found: <tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Moduwe with this name nyot found</b>
   hash_not_found_suggest: <tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>No matches. Cwosest:</b> <code>{}</code>
+
+command_conflicts:
+  choose: "<tg-emoji emoji-id=5870982283724328568>⚙</tg-emoji> Choose a moduwe fow <code>{}</code>:"
+  denied: "Onwy the command authow can choose."
+  used: "Command awweady sewected."
+  unavailable: "<tg-emoji emoji-id=5870657884844462243>❌</tg-emoji> Command no wongew avaiwabwe."
+  failed: "<tg-emoji emoji-id=5870931487146119264>❗</tg-emoji> Cannot show moduwes. Check the inwine bot."

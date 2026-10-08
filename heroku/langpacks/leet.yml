@@ -1,5 +1,9 @@
 heroku_security:
   name: "H3r0kuS3cur17y"
+  owner_prefix_invalid: "<tg-emoji emoji-id=5121063440311386962>❌</tg-emoji> <b>34ch pr3f1x: 0n3 ch4r, n0 wh1735p4c3, n07 s; 3n4bl3 n0n574nd4rd pr3f1x35 f0r l0ng3r v4lu35.</b>"
+  owneradd_usage: "<tg-emoji emoji-id=5870609858520158157>ℹ</tg-emoji> <b>U54g3:</b> <code>owneradd [u53r 0r r3ply] [-f] [-n] [-p pr3f1x]...</code>"
+  owner_prefix: "<tg-emoji emoji-id=5873204392429096339>⌨</tg-emoji> <b>P3r50n4l pr3f1x:</b> <code>{}</code>"
+  owner_exists: "<tg-emoji emoji-id=\"5872988737826197458\">⛔</tg-emoji> <b>C4nn07 4dd: <a href=\"tg://user?id={}\">{}</a> 15 4lr34dy 4n 0wn3r.</b>"
   invalid_name: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>1nv4l1d s3cur17y gr0up n4m3</b>"
   no_command: "🚫 <b>C0mm4nd</b> <code>{}</code> <b>n07 f0und!</b>"
   permissions: "🔐 <b>H3r3 u c4n c0nf1g p3rm15510nz 4</b> <code>{}{}</code>"
@@ -62,7 +66,7 @@ heroku_security:
   seconds: "s3c5"
   _cmd_doc_inlinesec: "[command] - C0nf1g 1nl1n3 cmd'5 s3c s3771ng5"
   _cmd_doc_querysec: "T0ggl3 p3rm15510n 2 3x3cu73 1nl1n3 qu3r135 f0r 3x73rn4l u53rz"
-  _cmd_doc_owneradd: "[-f|--force] [-n|--nonick] <user> - 4dd u53r 2 `owner`"
+  _cmd_doc_owneradd: "[-f|--force] [-n|--nonick] [-p prefix]... <user> - 4dd u53r 2 `owner`"
   _cmd_doc_ownerlist: "L157 u53rz 1n `owner`"
   _cmd_doc_ownerrm: "<user> - R3m0v3 u53r fr0m `owner`"
   _cmd_doc_security: "[command] - C0nf1g cmd'5 s3c s3771ng5"
@@ -190,6 +194,10 @@ terminal:
   exec_running: "<b>3x3cu71ng...</b>"
   btn_execute: "3x3cu73"
   btn_continue: "c0n71nu3 1npu7"
+  btn_input_password: "1npu7 p455w0rd"
+  sudo_password_input: "5ubm17 sudo p455w0rd"
+  sudo_password_required: "<b>sudo: p455w0rd r3qu1r3d.</b>"
+  sudo_password_retry: "<b>sudo: 3n73r 7h3 p455w0rd 4g41n.</b>"
   inline_hint: "73rm1n4l"
   inline_hint_desc: "574r7 7yp1ng 4 c0mm4nd"
 
@@ -651,6 +659,7 @@ loader:
   installed_all_from_repo: "<tg-emoji emoji-id=5429092129638980960>🪐</tg-emoji> <b>4ll m0dul35 fr0m r3p0 1n574ll3d 5ucc355fully!</b>"
   dlm_all_from_repo_error_nomods: "<tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>N0 m0dul35 f0und 1n 7h15 r3p0, f4gg07!</b>"
   dlm_all_from_repo_error_somemods: "<tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>50m3 m0dul35 f41l3d 2 1n574ll, b17ch:</b>\n"
+  rich_mode_doc: "R1ch M0d3 f0r m3554g35 1n l04d3r"
   show_banner_doc: "5h0w # m374 b4nn3r l1k3 pr3v13w?"
 
   '404': <tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>M0dul3 n07 f0und</b>
@@ -786,3 +795,10 @@ heroku_plugin_security:
   no_hash: <tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Y0u mu57 5p3c1fy 4 m0dul3 n4m3</b>
   hash_not_found: <tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>M0dul3 w17h 7h15 n4m3 n07 f0und</b>
   hash_not_found_suggest: <tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>N0 m47ch35. Cl05357:</b> <code>{}</code>
+
+command_conflicts:
+  choose: "<tg-emoji emoji-id=5870982283724328568>⚙</tg-emoji> Ch0053 4 m0dul3 f0r <code>{}</code>:"
+  denied: "0nly th3 c0mm4nd 4uth0r c4n ch0053."
+  used: "C0mm4nd 4lr34dy 53l3ct3d."
+  unavailable: "<tg-emoji emoji-id=5870657884844462243>❌</tg-emoji> C0mm4nd un4v41l4bl3."
+  failed: "<tg-emoji emoji-id=5870931487146119264>❗</tg-emoji> C4nn0t 5h0w m0dul35. Ch3ck 1nl1n3 b0t."

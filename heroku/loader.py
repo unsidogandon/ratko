@@ -580,6 +580,7 @@ class Modules:
     ):
         self._initial_registration = True
         self.commands = {}
+        self._command_handlers = {}
         self.inline_handlers = {}
         self.callback_handlers = {}
         self.aliases = {}
@@ -607,16 +608,20 @@ class Modules:
         while True:
             await asyncio.sleep(30)
             commands = {}
+            command_handlers = {}
             inline_handlers = {}
             callback_handlers = {}
             watchers = []
             for module in self.modules:
-                commands.update(module.heroku_commands)
+                for name, handler in module.heroku_commands.items():
+                    commands[name.lower()] = handler
+                    command_handlers.setdefault(name.lower(), []).append(handler)
                 inline_handlers.update(module.heroku_inline_handlers)
                 callback_handlers.update(module.heroku_callback_handlers)
                 watchers.extend(module.heroku_watchers.values())
 
             self.commands = commands
+            self._command_handlers = command_handlers
             self.inline_handlers = inline_handlers
             self.callback_handlers = callback_handlers
             self.watchers = watchers
@@ -896,7 +901,11 @@ class Modules:
 
                 raise CoreOverwriteError(command=_command)
 
-            self.commands.update({_command.lower(): cmd})
+            name = _command.lower()
+            handlers = self._command_handlers.setdefault(name, [])
+            if cmd not in handlers:
+                handlers.append(cmd)
+            self.commands[name] = cmd
 
         for alias, cmd in self.aliases.copy().items():
             _cmd = cmd.split(maxsplit=1)
@@ -1036,27 +1045,17 @@ class Modules:
         """Get command prefix"""
         from . import main
 
-        key = main.__name__
-        default = "."
-
-        if ent_id:
-            prefixes = self._db.get(key, "command_prefixes", {})
-            result = prefixes.get(str(ent_id), default)
-        else:
-            result = self._db.get(key, "command_prefix", default)
-        return result
+        return utils.user_prefixes(
+            self._db, main.__name__, ent_id, self.client.tg_id
+        )[0]
 
     def get_prefixes(self) -> set[str]:
         """Get all command prefixes"""
         from . import main
 
-        key = main.__name__
-        default = "."
-
-        prefixes = ()
-        prefixes += tuple(self._db.get(key, "command_prefixes", {}).values())
-        prefixes += tuple(self._db.get(key, "command_prefix", default))
-
+        prefixes = utils.user_prefixes(self._db, main.__name__)
+        for value in self._db.get(main.__name__, "command_prefixes", {}).values():
+            prefixes.extend(utils.normalize_prefixes(value))
         return set(prefixes)
 
     async def complete_registration(self, instance: Module):
@@ -1117,50 +1116,36 @@ class Modules:
 
         return None
 
-    def dispatch(self, _command: str) -> tuple[str, str | None]:
+    def dispatch(self, _command: str):
         """Dispatch command to appropriate module"""
+        text, handlers = self.dispatch_candidates(_command)
+        return text, handlers[-1] if handlers else None
 
-        resolved = next(
-            (
-                (cmd, self.commands[cmd.split()[0].lower()])
-                for cmd in [
-                    _command,
-                    self.aliases.get(_command.lower()),
-                    self.find_alias(_command),
-                ]
-                if cmd and cmd.split()[0].lower() in self.commands
-            ),
-            (_command, None),
-        )
-
-        cmd, func = resolved
-        if not func:
-            return resolved
-
-        try:
-            disabled_modules = self._db.get(main.__name__, "disabled_modules", [])
+    def dispatch_candidates(self, _command: str):
+        """Dispatch command to all modules, which provide it"""
+        for text in (
+            _command,
+            self.aliases.get(_command.lower()),
+            self.find_alias(_command),
+        ):
+            if not text:
+                continue
+            name = text.split()[0].lower()
+            if name not in self.commands:
+                continue
+            disabled = self._db.get(main.__name__, "disabled_modules", [])
             disabled_commands = self._db.get(main.__name__, "disabled_commands", {})
-        except Exception:
-            disabled_modules = []
-            disabled_commands = {}
-
-        module_name = None
-        try:
-            module_name = func.__self__.__class__.__name__
-        except Exception:
-            module_name = None
-
-        if module_name and module_name in disabled_modules:
-            return (_command, None)
-
-        if module_name and module_name in disabled_commands:
-            disabled_for_mod = [
-                x.lower() for x in disabled_commands.get(module_name, [])
-            ]
-            if cmd.split()[0].lower() in disabled_for_mod:
-                return (_command, None)
-
-        return (cmd, func)
+            handlers = self._command_handlers.get(name, [self.commands[name]])
+            available = []
+            for handler in handlers:
+                module_name = handler.__self__.__class__.__name__
+                if module_name in disabled or name in {
+                    item.lower() for item in disabled_commands.get(module_name, [])
+                }:
+                    continue
+                available.append(handler)
+            return text, available
+        return _command, []
 
     def send_config(self, skip_hook: bool = False):
         """Configure modules"""
@@ -1281,6 +1266,7 @@ class Modules:
             raise
 
         # Check for pack_url and load translations
+        pack_url = None
         if hasattr(mod, "__source__"):
             pack_url = next(
                 (
@@ -1296,6 +1282,7 @@ class Modules:
                     pack_url,
                     MODULES_LANGPACKS_PATH
                     / f"{self.client.tg_id}_{mod.__class__.__name__}.yml",
+                    cache_only=not from_dlmod,
                 )
             ):
                 mod.strings.external_strings = transations
@@ -1317,6 +1304,19 @@ class Modules:
         self.register_watchers(mod)
         self.register_raw_handlers(mod)
         self.register_bot_update_handlers(mod)
+
+        if pack_url and not from_dlmod:
+
+            async def refresh_translations():
+                translations = await self.translator.load_module_translations(
+                    pack_url,
+                    MODULES_LANGPACKS_PATH
+                    / f"{self.client.tg_id}_{mod.__class__.__name__}.yml",
+                )
+                if translations:
+                    mod.strings.external_strings = translations
+
+            mod.create_task(refresh_translations())
 
     def get_classname(self, name: str) -> str:
         return next(
@@ -1455,18 +1455,23 @@ class Modules:
                 method.stop()
 
     def unregister_commands(self, instance: Module, purpose: str):
-        for name, cmd in self.commands.copy().items():
-            if cmd.__self__.__class__.__name__ == instance.__class__.__name__:
-                logger.debug(
-                    "Removing command %s of module %s for %s",
-                    name,
-                    instance.__class__.__name__,
-                    purpose,
-                )
-                del self.commands[name]
-                for alias, _command in self.aliases.copy().items():
-                    if purpose != "update" and _command.split()[0].lower() == name:
-                        del self.aliases[alias]
+        for name, handlers in list(self._command_handlers.items()):
+            remaining = [
+                handler
+                for handler in handlers
+                if handler.__self__.__class__.__name__
+                != instance.__class__.__name__
+            ]
+            if remaining:
+                self._command_handlers[name] = remaining
+                self.commands[name] = remaining[-1]
+            else:
+                del self._command_handlers[name]
+                self.commands.pop(name, None)
+                if purpose != "update":
+                    for alias, command in list(self.aliases.items()):
+                        if command.split()[0].lower() == name:
+                            del self.aliases[alias]
 
     def unregister_watchers(self, instance: Module, purpose: str):
         for _watcher in self.watchers.copy():

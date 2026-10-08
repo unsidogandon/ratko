@@ -1,4 +1,8 @@
 heroku_security:
+  owner_prefix_invalid: "<tg-emoji emoji-id=5121063440311386962>❌</tg-emoji> <b>Каждый префикс — один символ без пробелов, кроме s. Хочешь длиннее — включай нестандартные префиксы.</b>"
+  owneradd_usage: "<tg-emoji emoji-id=5870609858520158157>ℹ</tg-emoji> <b>Юзай так:</b> <code>owneradd [юзер или ответ] [-f] [-n] [-p префикс]...</code>"
+  owner_prefix: "<tg-emoji emoji-id=5873204392429096339>⌨</tg-emoji> <b>Твой личный префикс:</b> <code>{}</code>"
+  owner_exists: "<tg-emoji emoji-id=\"5872988737826197458\">⛔</tg-emoji> <b>Не добавить: <a href=\"tg://user?id={}\">{}</a> уже в овнерах, это дубль.</b>"
   invalid_name: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Имя кринж какой-то</b>"
   no_command: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Команда</b> <code>{}</code> <b>не найдена, ты в муте?</b>"
   permissions: "🔐 <b>Тут кароче права для</b> <code>{}{}</code>"
@@ -58,7 +62,7 @@ heroku_security:
   seconds: "сек"
   _cmd_doc_inlinesec: "[команда] - Настроить права для инлайна"
   _cmd_doc_querysec: "Врубить/вырубить разрешение на выполнение инлайн запросов для ноунеймов"
-  _cmd_doc_owneradd: "[-f|--force] [-n|--nonick] <юзер> - Закинуть в `owner` (дать админку)"
+  _cmd_doc_owneradd: "[-f|--force] [-n|--nonick] [-p prefix]... <юзер> - Закинуть в `owner` (дать админку)"
   _cmd_doc_ownerlist: "Чекнуть кто в `owner`"
   _cmd_doc_ownerrm: "<юзер> - Кикнуть из `owner`"
   _cmd_doc_security: "[команда] - Настроить права, кто может юзать"
@@ -181,6 +185,10 @@ terminal:
   exec_running: "<b>Выполняю... щавель в деле</b>"
   btn_execute: "Выполнить 67"
   btn_continue: "Дописать команду"
+  btn_input_password: "Вбить пароль"
+  sudo_password_input: "Закинуть пароль sudo"
+  sudo_password_required: "<b>sudo: гони пароль, хакер.</b>"
+  sudo_password_retry: "<b>sudo: давай пароль ещё раз, бро.</b>"
   inline_hint: "Хакер тул"
   inline_hint_desc: "Начинай вводить, сигма-бой"
 
@@ -636,6 +644,7 @@ loader:
   installed_all_from_repo: "<tg-emoji emoji-id=5429092129638980960>🪐</tg-emoji> <b>Все модули из репозитория успешно установлены! Сигма момент</b>"
   dlm_all_from_repo_error_nomods: "<tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>В этой репе нет ни одного модуля. Кринж</b>"
   dlm_all_from_repo_error_somemods: "<tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>Плаки, плаки. Некоторые модули не установились, кароче фейл, щавель не зашёл:</b>\n"
+  rich_mode_doc: "Rich-режим сообщений в лоадере"
   show_banner_doc: "Сигма или нормис?)"
 
   name: Loader
@@ -773,3 +782,10 @@ heroku_plugin_security:
   no_hash: <tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Назови модуль</b>
   hash_not_found: <tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>Такого модуля нет, лол</b>
   hash_not_found_suggest: <tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>Точного нет. Похоже на:</b> <code>{}</code>
+
+command_conflicts:
+  choose: "<tg-emoji emoji-id=5870982283724328568>⚙</tg-emoji> Выбери модуль для <code>{}</code>:"
+  denied: "Выбирать может только автор команды."
+  used: "Команда уже выбрана."
+  unavailable: "<tg-emoji emoji-id=5870657884844462243>❌</tg-emoji> Команда больше недоступна."
+  failed: "<tg-emoji emoji-id=5870931487146119264>❗</tg-emoji> Не удалось показать выбор модуля. Проверь инлайн-бота."

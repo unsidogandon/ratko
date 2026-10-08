@@ -300,22 +300,26 @@ class CommandDispatcher:
         self,
         event: events.NewMessage | events.MessageDeleted,
         watcher: bool = False,
+        selected: Callable | None = None,
     ) -> bool | tuple[Message, str, str, callable]:
         if not hasattr(event, "message") or not hasattr(event.message, "message"):
             return False
 
         initiator = getattr(event, "sender_id", 0)
 
-        main_prefix = self._db.get(main.__name__, "command_prefix", ".")
-        if initiator == self._client.tg_id:
-            prefix = main_prefix
-        else:
-            prefix = self._db.get(main.__name__, "command_prefixes", {})
-            prefix = prefix.get(str(initiator), main_prefix)
+        prefixes = utils.user_prefixes(
+            self._db, main.__name__, initiator, self._client.tg_id
+        )
 
         message = utils.censor(event.message)
 
         if not event.message.message:
+            return False
+
+        prefix, _switch_layout = utils.match_prefix(
+            event.message.message, prefixes, _LAYOUT_TRANSLATION
+        )
+        if prefix is None:
             return False
 
         if (
@@ -338,20 +342,12 @@ class CommandDispatcher:
                         parse_mode=lambda s: (
                             s,
                             utils.relocate_entities(
-                                message.entities, -1, message.message
+                                message.entities, -len(prefix), message.message
                             )
                             or (),
                         ),
                     )
                 return False
-
-        _translated_prefix = str.translate(prefix, _LAYOUT_TRANSLATION)
-        _switch_layout = (
-            _translated_prefix != prefix
-            and event.message.message.startswith(_translated_prefix)
-        )
-        if not _switch_layout and not event.message.message.startswith(prefix):
-            return False
 
         _msg = (
             str.translate(message.message, _LAYOUT_TRANSLATION)
@@ -414,17 +410,10 @@ class CommandDispatcher:
         ):
             return False
 
-        txt, func = self._modules.dispatch(tag[0])
-
-        if (
-            not func
-            or not await self._handle_ratelimit(message, func)
-            or not await self.security.check(
-                message,
-                func,
-                usernames=self._cached_usernames,
-            )
-        ):
+        txt, handlers = self._modules.dispatch_candidates(tag[0])
+        if selected is not None:
+            handlers = [handler for handler in handlers if handler == selected]
+        if not handlers:
             return False
 
         if message.is_channel and message.edit_date and not message.is_group:
@@ -443,32 +432,118 @@ class CommandDispatcher:
             return False
 
         _cmd_offset = len(prefix) + len(_cmd) - len(_cmd.strip())
+        filter_event = type(event).__new__(type(event))
+        filter_event.__dict__.update(event.__dict__)
+        message = type(message).__new__(type(message))
+        message.__dict__.update(event.message.__dict__)
+        filter_event.__dict__["message"] = message
         if not watcher:
             new_text = prefix + txt + _msg[_cmd_offset + len(command) :]
             if new_text != message.message:
-                _offset = len(new_text) - len(message.message)
-
-                if _offset:
-                    utils.relocate_entities(message.entities, _offset)
-
+                offset = len(new_text) - len(message.message)
+                if offset and message.entities:
+                    entities = []
+                    for entity in message.entities:
+                        cloned = type(entity).__new__(type(entity))
+                        cloned.__dict__.update(entity.__dict__)
+                        entities.append(cloned)
+                    message.entities = entities
+                    utils.relocate_entities(
+                        message.entities, offset, message.message
+                    )
                 message._text = None
                 message.message = new_text
 
+        available = []
+        for handler in handlers:
+            module_key = f"{chat_id}.{handler.__self__.__module__}"
+            if module_key in blacklist_chats or (
+                whitelist_modules and module_key not in whitelist_modules
+            ):
+                continue
+            if not await self.security.check(
+                message, handler, usernames=self._cached_usernames
+            ):
+                continue
+            if await self._handle_tags(filter_event, handler):
+                continue
+            available.append(handler)
+        if not available:
+            return False
+        if len(available) > 1 and not watcher:
+            await self._choose_command(event, txt, available)
+            return False
+        func = available[-1]
+        if not await self._handle_ratelimit(message, func):
+            return False
+
         if (
-            f"{str(chat_id)}.{func.__self__.__module__}" in blacklist_chats
-            or whitelist_modules
-            and f"{chat_id}.{func.__self__.__module__}" not in whitelist_modules
+            self._db.get(main.__name__, "grep", False)
+            and not watcher
+            and getattr(func.__self__.__class__, "__name__", "") != "TerminalMod"
         ):
-            return False
-
-        if await self._handle_tags(event, func):
-            return False
-
-        if self._db.get(main.__name__, "grep", False) and not watcher:
             message = self._handle_grep(message)
 
         message = self._patch_message_emoji_methods(message)
         return message, prefix, txt, func
+
+    def _conflict_text(self, key):
+        return self._modules.translator.getkey(
+            f"heroku.modules.command_conflicts.{key}"
+        )
+
+    async def _choose_command(self, event, text, handlers):
+        state = {"author": event.sender_id, "used": False}
+        buttons = []
+        for handler in handlers:
+            module = handler.__self__
+            name = module.strings["name"]
+            buttons.append(
+                [
+                    {
+                        "text": name,
+                        "emoji_id": "5872695159631647090",
+                        "callback": self._run_chosen_command,
+                        "args": (event, handler, state),
+                    }
+                ]
+            )
+        try:
+            form = await self._modules.inline.form(
+                text=self._conflict_text("choose").format(
+                    utils.escape_html(text)
+                ),
+                message=utils.get_chat_id(event),
+                reply_to=event.message.id,
+                reply_markup=buttons,
+                force_me=True,
+                always_allow=[state["author"]],
+                ttl=120,
+            )
+        except Exception:
+            logger.exception("Unable to show command selection")
+            form = False
+        if not form:
+            await utils.answer(event.message, self._conflict_text("failed"))
+
+    async def _run_chosen_command(self, call, event, handler, state):
+        if call.from_user.id != state["author"]:
+            await call.answer(self._conflict_text("denied"), show_alert=True)
+            return
+        if state["used"]:
+            await call.answer(self._conflict_text("used"), show_alert=True)
+            return
+        state["used"] = True
+        result = await self._handle_command(event, selected=handler)
+        if not result:
+            await call.edit(self._conflict_text("unavailable"), reply_markup=[])
+            return
+        message, _, _, func = result
+        try:
+            await call.delete()
+        except Exception:
+            logger.exception("Unable to delete command selection")
+        asyncio.ensure_future(self.future_dispatcher(func, message, self.command_exc))
 
     async def handle_raw(self, event: events.Raw):
         """Handle raw events."""

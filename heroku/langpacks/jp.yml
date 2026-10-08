@@ -1,5 +1,9 @@
 heroku_security:
   name: "RatkoSecurity"
+  owner_prefix_invalid: "<tg-emoji emoji-id=5121063440311386962>❌</tg-emoji> <b>各プレフィックスは空白と s 以外の1文字です。長い値には非標準プレフィックスを有効にしてください。</b>"
+  owneradd_usage: "<tg-emoji emoji-id=5870609858520158157>ℹ</tg-emoji> <b>使い方：</b> <code>owneradd [ユーザーまたは返信] [-f] [-n] [-p プレフィックス]...</code>"
+  owner_prefix: "<tg-emoji emoji-id=5873204392429096339>⌨</tg-emoji> <b>個人用プレフィックス：</b> <code>{}</code>"
+  owner_exists: "<tg-emoji emoji-id=\"5872988737826197458\">⛔</tg-emoji> <b>追加できません：<a href=\"tg://user?id={}\">{}</a> はすでにオーナーです。</b>"
   invalid_name: "<tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>無効なセキュリティグループ名です</b>"
   no_command: "🚫 <b>コマンド</b> <code>{}</code> <b>は見つかりませんでした！</b>"
   permissions: "🔐 <b>ここでは</b> <code>{}{}</code> <b>の権限を設定できます</b>"
@@ -62,7 +66,7 @@ heroku_security:
   seconds: "秒"
   _cmd_doc_inlinesec: "[command] - インラインコマンドのセキュリティ設定を構成します"
   _cmd_doc_querysec: "外部ユーザーのインラインクエリの実行許可を切り替えます"
-  _cmd_doc_owneradd: "[-f|--force] [-n|--nonick] <user> - ユーザーを `owner` に追加します"
+  _cmd_doc_owneradd: "[-f|--force] [-n|--nonick] [-p prefix]... <user> - ユーザーを `owner` に追加します"
   _cmd_doc_ownerlist: "`owner` グループのユーザーを一覧表示します"
   _cmd_doc_ownerrm: "<user> - ユーザーを `owner` から削除します"
   _cmd_doc_security: "[command] - コマンドのセキュリティ設定を構成します"
@@ -190,6 +194,10 @@ terminal:
   exec_running: "<b>実行しています...</b>"
   btn_execute: "実行する"
   btn_continue: "入力を続ける"
+  btn_input_password: "パスワードを入力"
+  sudo_password_input: "sudo のパスワードを送信"
+  sudo_password_required: "<b>sudo: パスワードが必要です。</b>"
+  sudo_password_retry: "<b>sudo: パスワードをもう一度入力してください。</b>"
   inline_hint: "ターミナル"
   inline_hint_desc: "コマンドを入力し始めてください"
 
@@ -652,6 +660,7 @@ loader:
   installed_all_from_repo: "<tg-emoji emoji-id=5429092129638980960>🪐</tg-emoji> <b>リポジトリからすべてのモジュールが正常にインストールされました！</b>"
   dlm_all_from_repo_error_nomods: "<tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>このリポジトリにモジュールが見つかりません！</b>"
   dlm_all_from_repo_error_somemods: "<tg-emoji emoji-id=5312383351217201533>⚠️</tg-emoji> <b>一部のモジュールのインストールに失敗しました:</b>\n"
+  rich_mode_doc: "ローダーのメッセージにRichモードを使用"
   show_banner_doc: "メタバナーのプレビューを表示しますか？"
 
   '404': <tg-emoji emoji-id=5210952531676504517>🚫</tg-emoji> <b>モジュールが見つかりません</b>
@@ -812,3 +821,10 @@ heroku_plugin_security:
   _cmd_doc_newsgroup: "<name> - 新しいセキュリティ グループの作成"
   _cmd_doc_sgroupadd: "<name> [ユーザーまたは返信] - ユーザーをセキュリティ グループに追加します"
   _cmd_doc_sgroupdel: "<name> [ユーザーまたは返信] - セキュリティ グループからユーザーを削除します"
+
+command_conflicts:
+  choose: "<tg-emoji emoji-id=5870982283724328568>⚙</tg-emoji> <code>{}</code> のモジュールを選択してください:"
+  denied: "コマンドの送信者のみ選択できます。"
+  used: "このコマンドは選択済みです。"
+  unavailable: "<tg-emoji emoji-id=5870657884844462243>❌</tg-emoji> このコマンドは利用できなくなりました。"
+  failed: "<tg-emoji emoji-id=5870931487146119264>❗</tg-emoji> モジュール選択を表示できません。インラインボットを確認してください。"
