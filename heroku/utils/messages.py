@@ -75,6 +75,19 @@ def use_exteragram_emoji_links(message: typing.Any) -> bool:
     return bool(db.get("HerokuSettingsMod", "exteragram_emoji", True))
 
 
+def _emoji_links_target(message: typing.Any) -> typing.Any:
+    """
+    Resolve the client whose premium status governs tg-emoji link fallbacks.
+    Inline objects are backed by their manager's userbot client.
+    """
+    if isinstance(message, Message) or (
+        hasattr(message, "loader") and hasattr(message, "heroku_me")
+    ):
+        return message
+    manager = getattr(message, "inline_manager", None)
+    return getattr(manager, "_client", None) or message
+
+
 def replace_tg_emoji_tags(response: str, message: typing.Any) -> str:
     if not isinstance(response, str) or (
         "<tg-emoji" not in response and "<emoji" not in response
@@ -466,6 +479,13 @@ async def answer(
         rich_filter = getattr(message, "_heroku_grep_rich", None)
         if callable(rich_filter):
             rich_message = rich_filter(rich_message)
+
+        # Bot-sent rich content cannot carry custom emoji without premium,
+        # so degrade the tags to tg://emoji links, as plain responses do.
+        rich_message = replace_tg_emoji_tags(
+            rich_message,
+            _emoji_links_target(message),
+        )
 
         if isinstance(
             message,

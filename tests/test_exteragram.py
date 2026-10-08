@@ -1,9 +1,10 @@
 import unittest
+from types import SimpleNamespace
 
 from heroku.inline.tl import TelethonBot
 from heroku.inline.utils import Utils as InlineUtils
 from heroku.tl_cache import CustomTelegramClient
-from heroku.utils.messages import replace_tg_emoji_tags
+from heroku.utils.messages import _emoji_links_target, replace_tg_emoji_tags
 
 
 class FakeDatabase:
@@ -83,6 +84,40 @@ class ExteraGramEmojiTest(unittest.TestCase):
         self.assertEqual(
             bot._emoji_text(text),
             '<a href="tg://emoji?id=5471950641918121951">moon</a>',
+        )
+
+
+class EmojiLinksTargetTest(unittest.TestCase):
+    def test_inline_objects_use_their_managers_client(self):
+        client = FakeClient()
+        inline = SimpleNamespace(
+            inline_manager=SimpleNamespace(_client=client)
+        )
+        self.assertIs(_emoji_links_target(inline), client)
+
+    def test_clients_and_plain_objects_resolve_to_themselves(self):
+        client = FakeClient()
+        self.assertIs(_emoji_links_target(client), client)
+        message_like = SimpleNamespace(client=client)
+        self.assertIs(_emoji_links_target(message_like), message_like)
+        fallback = SimpleNamespace()
+        self.assertIs(_emoji_links_target(fallback), fallback)
+
+    def test_rich_html_uses_the_same_conversion_as_plain_text(self):
+        rich = (
+            "<h1>ratko</h1>"
+            '<tg-emoji emoji-id="111">moon</tg-emoji>'
+            "<emoji document_id='222'>alt</emoji>"
+        )
+        self.assertEqual(
+            replace_tg_emoji_tags(rich, FakeClient()),
+            "<h1>ratko</h1>"
+            '<a href="tg://emoji?id=111">moon</a>'
+            '<a href="tg://emoji?id=222">alt</a>',
+        )
+        self.assertEqual(replace_tg_emoji_tags(rich, FakeClient(premium=True)), rich)
+        self.assertEqual(
+            replace_tg_emoji_tags(rich, FakeClient(enabled=False)), rich
         )
 
 

@@ -1,12 +1,40 @@
 """Rich inline responses retain their payload and replace only outgoing commands."""
 
+import ast
 import asyncio
+import re
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import test_runtime_lifecycle as lifecycle
-from test_runtime_performance import load_definition
+from test_runtime_performance import ROOT, load_definition
+
+
+def load_emoji_support(namespace):
+    """Bind the real exteragram conversion so tests exercise production rules."""
+    namespace.setdefault("re", re)
+    tree = ast.parse((ROOT / "heroku/utils/messages.py").read_text())
+    patterns = ast.Module(
+        body=[
+            node
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name)
+                and target.id in {"TG_EMOJI_TAG_PATTERN", "LEGACY_EMOJI_TAG_PATTERN"}
+                for target in node.targets
+            )
+        ],
+        type_ignores=[],
+    )
+    exec(compile(ast.fix_missing_locations(patterns), "emoji_patterns", "exec"), namespace)
+    for name in (
+        "use_exteragram_emoji_links",
+        "replace_tg_emoji_tags",
+        "_emoji_links_target",
+    ):
+        load_definition("heroku/utils/messages.py", name, namespace)
 
 
 class RichInlineResponseTest(unittest.IsolatedAsyncioTestCase):
@@ -21,8 +49,13 @@ class RichInlineResponseTest(unittest.IsolatedAsyncioTestCase):
         })
         load_definition("heroku/inline/types.py", "InlineMessage", self.namespace)
         self.answer = load_definition("heroku/utils/messages.py", "answer", self.namespace)
-        for name in ("_send_rich_message", "_edit_rich_message"):
+        for name in (
+            "_send_rich_message",
+            "_edit_rich_message",
+            "_edit_inline_rich_message",
+        ):
             load_definition("heroku/utils/messages.py", name, self.namespace)
+        load_emoji_support(self.namespace)
         lifecycle.bind_methods(
             type(self.manager), "heroku/inline/utils.py", "Utils", ("_generate_markup",),
             self.namespace,
@@ -44,10 +77,17 @@ class RichInlineResponseTest(unittest.IsolatedAsyncioTestCase):
         self.namespace["get_topic"] = lambda message: message.topic_id
         self.manager._me = 1
         self.manager._edit_unit = AsyncMock(return_value=True)
-        self.manager.bot = SimpleNamespace(edit_message_reply_markup=AsyncMock())
+        self.manager.bot = SimpleNamespace(
+            edit_message_reply_markup=AsyncMock(),
+            edit_rich_message=AsyncMock(),
+        )
+        self.exteragram = Mock(return_value=True)
         self.client = SimpleNamespace(
             heroku_me=SimpleNamespace(premium=False),
-            loader=SimpleNamespace(inline=self.manager),
+            loader=SimpleNamespace(
+                inline=self.manager,
+                db=SimpleNamespace(get=self.exteragram),
+            ),
             edit_rich_message=AsyncMock(return_value="native edit"),
             send_rich_message=AsyncMock(return_value="native send"),
         )
@@ -150,6 +190,54 @@ class RichInlineResponseTest(unittest.IsolatedAsyncioTestCase):
         self.manager.bot.edit_message_reply_markup.assert_not_awaited()
         self.assertEqual(self.manager._units[result.unit_id]["buttons"], buttons)
         self.assertEqual(self.queries[0].rich_article.call_args.kwargs["buttons"], buttons)
+
+    async def test_nonpremium_rich_emoji_tags_become_tg_links(self):
+        rich = (
+            "<h1>ratko</h1>"
+            '<tg-emoji emoji-id="111">moon</tg-emoji>'
+            "<emoji document_id='222'>alt</emoji>"
+        )
+        result = await self.answer(self.message, rich_message=rich)
+        self.assertTrue(result)
+        self.assertEqual(
+            self.queries[0].rich_article.call_args.kwargs["html"],
+            "<h1>ratko</h1>"
+            '<a href="tg://emoji?id=111">moon</a>'
+            '<a href="tg://emoji?id=222">alt</a>',
+        )
+        self.assertEqual(
+            self.manager._units[result.unit_id]["rich_message"],
+            self.queries[0].rich_article.call_args.kwargs["html"],
+        )
+        self.message.delete.assert_awaited_once()
+
+    async def test_premium_rich_emoji_tags_are_kept_native(self):
+        self.client.heroku_me.premium = True
+        rich = '<tg-emoji emoji-id="111">moon</tg-emoji>'
+        await self.answer(self.message, rich_message=rich)
+        self.client.edit_rich_message.assert_awaited_once()
+        self.assertEqual(self.client.edit_rich_message.call_args.args[2], rich)
+        self.assertEqual(self.queries, [])
+
+    async def test_disabled_exteragram_setting_keeps_rich_tags(self):
+        self.exteragram.return_value = False
+        rich = '<tg-emoji emoji-id="111">moon</tg-emoji>'
+        result = await self.answer(self.message, rich_message=rich)
+        self.assertTrue(result)
+        self.assertEqual(self.queries[0].rich_article.call_args.kwargs["html"], rich)
+
+    async def test_inline_rich_edit_also_gets_emoji_links(self):
+        self.manager._client = self.client
+        target = self.namespace["InlineMessage"](self.manager, "unit", "inline-id")
+        target.chat_id = 123
+        result = await self.answer(
+            target, rich_message='<tg-emoji emoji-id="111">moon</tg-emoji>'
+        )
+        self.assertTrue(result)
+        self.assertEqual(
+            self.queries[0].rich_article.call_args.kwargs["html"],
+            '<a href="tg://emoji?id=111">moon</a>',
+        )
 
     async def test_incoming_messages_are_never_deleted(self):
         self.message.out = False
