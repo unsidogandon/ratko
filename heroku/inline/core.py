@@ -599,7 +599,12 @@ class InlineManager(
         )
 
     async def _wait_for_unit(self, unit_id: str, timeout: float = 30) -> bool:
-        """Wait for Telegram's chosen result without leaving a stranded form."""
+        """Wait for Telegram's chosen result, as upstream does, but bounded.
+
+        Buttonless units legitimately have no ``inline_message_id``: Telegram
+        only assigns it to results sent with a keyboard, and nothing needs
+        it while there are no buttons to press or edits to make.
+        """
         unit = self._units.get(unit_id)
         if unit is None:
             return False
@@ -615,9 +620,6 @@ class InlineManager(
             await self._unload_unit(unit_id)
             raise
         if self._units.get(unit_id) is not unit:
-            return False
-        if not unit.get("inline_message_id"):
-            await self._unload_unit(unit_id)
             return False
         unit.pop("future", None)
         return True

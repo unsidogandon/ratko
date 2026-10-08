@@ -481,11 +481,12 @@ class InlineWaitTest(unittest.IsolatedAsyncioTestCase):
         await self.manager._unload_unit("unit")
         self.assertFalse(await asyncio.wait_for(task, timeout=0.5))
 
-    async def test_missing_unit_or_chosen_message_returns_false(self):
+    async def test_missing_unit_fails_and_keyboardless_result_is_accepted(self):
         self.assertFalse(await self.manager._wait_for_unit("missing"))
         self.manager._units["unit"]["future"].set()
-        self.assertFalse(await self.manager._wait_for_unit("unit"))
-        self.assertEqual(self.manager._units, {})
+        self.assertTrue(await self.manager._wait_for_unit("unit"))
+        self.assertIn("unit", self.manager._units)
+        self.assertNotIn("future", self.manager._units["unit"])
 
     async def test_stalled_unload_callback_is_cancelled_and_cleanup_still_runs(self):
         self.shorten_timeouts()

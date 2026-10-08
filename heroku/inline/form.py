@@ -298,8 +298,7 @@ class Form(InlineUnit):
 
         perms_map = None if manual_security else self._find_caller_sec_map()
 
-        if not reply_markup:
-            # Telegram supplies inline_message_id only when a keyboard is present.
+        if not reply_markup and not ttl and rich_message is None:
             logger.debug("Patching form reply markup with empty data")
             base_reply_markup = copy.deepcopy(reply_markup) or None
             reply_markup = self._validate_markup({"text": "­", "data": "­"})
@@ -399,20 +398,6 @@ class Form(InlineUnit):
         self._units[unit_id]["message_id"] = m.id
 
         inline_message_id = self._units[unit_id]["inline_message_id"]
-
-        if rich_message is not None and not isinstance(base_reply_markup, Placeholder):
-            try:
-                # Remove the temporary keyboard without replacing Rich with text.
-                await self.bot.edit_message_reply_markup(
-                    inline_message_id=inline_message_id,
-                    reply_markup=self.generate_markup(base_reply_markup, unit_id=unit_id),
-                )
-            except (Exception, asyncio.CancelledError):
-                await self._unload_unit(unit_id)
-                raise
-            if unit_id not in self._units:
-                return False
-            self._units[unit_id]["buttons"] = base_reply_markup or []
 
         msg = InlineMessage(
             inline_manager=self, unit_id=unit_id, inline_message_id=inline_message_id

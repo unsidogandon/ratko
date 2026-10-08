@@ -71,11 +71,7 @@ class RichInlineResponseTest(unittest.IsolatedAsyncioTestCase):
         async def delete():
             self.operations.append("delete command")
 
-        async def remove_markup(**kwargs):
-            self.operations.append("remove temporary markup")
-
         self.message.delete.side_effect = delete
-        self.manager.bot.edit_message_reply_markup.side_effect = remove_markup
 
         async def invoke(unit_id, message, **kwargs):
             self.invocations.append((message, kwargs))
@@ -105,16 +101,13 @@ class RichInlineResponseTest(unittest.IsolatedAsyncioTestCase):
         result = await self.answer(self.message, rich_message=self.rich)
         self.assertIsInstance(result, self.namespace["InlineMessage"])
         self.message.delete.assert_awaited_once_with()
-        self.assertEqual(self.operations, [
-            "send inline result", "remove temporary markup", "delete command",
-        ])
+        self.assertEqual(self.operations, ["send inline result", "delete command"])
         self.assertEqual(self.queries[0].rich_article.call_args.kwargs["html"], self.rich)
-        self.assertTrue(self.queries[0].rich_article.call_args.kwargs["buttons"])
+        self.assertEqual(self.queries[0].rich_article.call_args.kwargs["buttons"], [])
         self.assertEqual(self.manager._units[result.unit_id]["buttons"], [])
+        self.assertIsNone(self.manager._units[result.unit_id]["inline_message_id"])
         self.manager._edit_unit.assert_not_awaited()
-        self.manager.bot.edit_message_reply_markup.assert_awaited_once_with(
-            inline_message_id="inline-id", reply_markup=None,
-        )
+        self.manager.bot.edit_message_reply_markup.assert_not_awaited()
 
     async def test_images_and_rich_blocks_are_not_resent_or_replaced_with_plain_text(self):
         rich = '<figure><img src="https://example.invalid/banner.jpg"/></figure>' + self.rich
@@ -130,14 +123,15 @@ class RichInlineResponseTest(unittest.IsolatedAsyncioTestCase):
         self.message.delete.assert_awaited_once()
         self.assertEqual(self.queries[0].rich_article.call_args.kwargs["html"], self.rich)
 
-    async def test_explicit_form_ttl_does_not_skip_temporary_markup(self):
+    async def test_buttonless_rich_with_ttl_has_no_temporary_markup(self):
         result = await self.manager.form(
             text="fallback", message=self.message, rich_message=self.rich, ttl=600,
             silent=True,
         )
         self.assertTrue(result)
         self.message.delete.assert_awaited_once()
-        self.manager.bot.edit_message_reply_markup.assert_awaited_once()
+        self.manager.bot.edit_message_reply_markup.assert_not_awaited()
+        self.assertEqual(self.queries[0].rich_article.call_args.kwargs["buttons"], [])
 
     async def test_rich_without_explicit_ttl_does_not_edit_to_fallback_text(self):
         result = await self.manager.form(
@@ -146,6 +140,7 @@ class RichInlineResponseTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result)
         self.manager._edit_unit.assert_not_awaited()
         self.assertEqual(self.manager._units[result.unit_id]["rich_message"], self.rich)
+        self.assertEqual(self.queries[0].rich_article.call_args.kwargs["buttons"], [])
 
     async def test_existing_rich_buttons_are_preserved(self):
         buttons = [[{"text": "keep", "data": "test-callback"}]]
@@ -205,28 +200,27 @@ class RichInlineResponseTest(unittest.IsolatedAsyncioTestCase):
         self.message.delete.assert_not_awaited()
         self.assertEqual(self.manager._units, {})
 
-    async def test_failed_markup_cleanup_keeps_command_and_releases_unit(self):
-        self.manager.bot.edit_message_reply_markup.side_effect = RuntimeError("synthetic markup failure")
-        with self.assertRaisesRegex(RuntimeError, "synthetic markup failure"):
-            await self.answer(self.message, rich_message=self.rich)
-        self.message.delete.assert_not_awaited()
-        self.assertEqual(self.manager._units, {})
-
-    async def test_cancelled_markup_cleanup_keeps_command_and_releases_unit(self):
-        self.manager.bot.edit_message_reply_markup.side_effect = asyncio.CancelledError()
-        with self.assertRaises(asyncio.CancelledError):
-            await self.answer(self.message, rich_message=self.rich)
-        self.message.delete.assert_not_awaited()
-        self.assertEqual(self.manager._units, {})
-
     async def test_plain_form_with_ttl_still_cleans_up_the_command(self):
         result = await self.manager.form(
             text="plain", message=self.message, ttl=600, silent=True,
         )
         self.assertTrue(result)
         self.message.delete.assert_awaited_once()
+        self.manager._edit_unit.assert_not_awaited()
+        self.manager.bot.edit_message_reply_markup.assert_not_awaited()
+
+    async def test_buttonless_plain_form_without_ttl_keeps_upstream_patch(self):
+        result = await self.manager.form(
+            text="plain", message=self.message, silent=True,
+        )
+        self.assertTrue(result)
+        self.message.delete.assert_awaited_once()
         self.manager._edit_unit.assert_awaited_once()
         self.manager.bot.edit_message_reply_markup.assert_not_awaited()
+        unit = self.manager._units[result.unit_id]
+        self.assertEqual(
+            [button for row in unit["buttons"] for button in row][0]["text"], "­"
+        )
 
 
 if __name__ == "__main__":
