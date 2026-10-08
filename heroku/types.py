@@ -592,17 +592,6 @@ class Module:
                 )
             )
 
-        if (
-            all(
-                line.replace(" ", "") != "#scope:no_stats" for line in code.splitlines()
-            )
-            and self._db.get("heroku.main", "stats", True)
-            and url is not None
-            and utils.check_url(url)
-        ):
-            with contextlib.suppress(Exception):
-                await self.lookup("LoaderMod")._send_stats(url)
-
         lib_obj.source_url = url.strip("/")
         lib_obj.allmodules = self.allmodules
         lib_obj.internal_init()
