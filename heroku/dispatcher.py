@@ -448,9 +448,7 @@ class CommandDispatcher:
                         cloned.__dict__.update(entity.__dict__)
                         entities.append(cloned)
                     message.entities = entities
-                    utils.relocate_entities(
-                        message.entities, offset, message.message
-                    )
+                    utils.relocate_entities(message.entities, offset)
                 message._text = None
                 message.message = new_text
 

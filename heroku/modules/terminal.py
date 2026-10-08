@@ -141,6 +141,9 @@ class SudoMessageEditor(MessageEditor):
             self.stderr = stderr
             if self.inline_editor is None and InlineMessageEditor.password_requested(stderr):
                 module = self.request_message.client.loader.lookup("TerminalMod")
+                if module is None:
+                    await self.redraw()
+                    return
                 editor = InlineMessageEditor(
                     None, self.command, self.strings, self.config
                 )
