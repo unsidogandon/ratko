@@ -296,12 +296,15 @@ class Help(loader.Module):
             rich_inline_commands = inline_cmd.replace("\r\n", "<br>").replace(
                 "\n", "<br>"
             )
+            rich_placeholders = placeholders.replace("\r\n", "<br>").replace(
+                "\n", "<br>"
+            )
             rich_message = (
                 f"{rich_reply}<details><summary>{self.strings['rich_commands']}</summary>"
                 f"{rich_commands}{rich_inline_commands}</details>"
                 + (
                     f"<details><summary>{self.strings['rich_placeholders']}</summary>"
-                    f"{placeholders}</details>"
+                    f"{rich_placeholders}</details>"
                     if placeholders
                     else ""
                 )
@@ -519,7 +522,9 @@ class Help(loader.Module):
                     if self.config["banner_url"]
                     else ""
                 )
-                + f"{self.config['desc_icon']} {reply}"
+                + f"{self.config['desc_icon']} {reply}".replace(
+                    "\r\n", "<br>"
+                ).replace("\n", "<br>")
             )
             rich_core = "".join(f"<p>{item.strip()}</p>" for item in core_)
             rich_modules = "".join(

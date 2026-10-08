@@ -14,6 +14,7 @@ import getpass
 import logging
 import platform as lib_platform
 import random
+import re
 import time
 from io import BytesIO
 
@@ -256,11 +257,14 @@ class HerokuInfoMod(loader.Module):
             "htl_ver": herokutl.__version__,
             "git_status": utils.get_git_status(),
         }
+        rich_banner_url = None
         if template_key == "rich_info_message":
             rich_banner_url, _ = self._get_effective_banner()
-            data["banner_url"] = rich_banner_url
+            data["banner_url"] = (
+                utils.escape_html(str(rich_banner_url)) if rich_banner_url else ""
+            )
             data["img"] = (
-                f'<img src="{utils.escape_html(str(rich_banner_url))}"/>'
+                f'<img src="{data["banner_url"]}"/>'
                 if rich_banner_url
                 else ""
             )
@@ -268,10 +272,21 @@ class HerokuInfoMod(loader.Module):
         data = await utils.get_placeholders(data, template)
 
         try:
-            return template.format(**data)
+            rendered = template.format(**data)
         except KeyError:
             logger.exception("Missing placeholder in custom_message")
             return DEFAULT_INFO_MESSAGE.format(**data)
+
+        if template_key == "rich_info_message" and not rich_banner_url:
+            # Баннер не настроен: выкидываем пустой <figure><img src=""/></figure>
+            # из rich-шаблона (кастомные <figure> с реальной картинкой не трогаем)
+            rendered = re.sub(
+                r"<figure>\s*<img\b[^>]*?src=\"\"[^>]*>\s*</figure>",
+                "",
+                rendered,
+            )
+
+        return rendered
 
     @loader.command()
     async def infocmd(self, message: Message):
