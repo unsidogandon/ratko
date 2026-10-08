@@ -343,7 +343,7 @@ class Form(InlineUnit):
             **({"message": message} if isinstance(message, Message) else {}),
             **({"force_me": force_me} if force_me else {}),
             **({"disable_security": disable_security} if disable_security else {}),
-            **({"ttl": round(time.time()) + ttl} if ttl else {}),
+            "ttl": time.time() + (ttl or self._markup_ttl),
             **({"always_allow": always_allow} if always_allow else {}),
         }
 

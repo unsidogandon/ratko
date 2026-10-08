@@ -380,13 +380,17 @@ class TelegramLogsHandler(logging.Handler):
                     [logchat for _, logchat in skipped],
                 )
 
+            # emit() may append records while delivery awaits Telegram. Only
+            # consume this snapshot, leaving newer records for the next batch.
+            buffer = self.tg_buff
+            batch = buffer[:]
             self._queue = {
                 client_id: utils.chunks(
                     utils.escape_html(
                         "".join(
                             [
                                 item[0]
-                                for item in self.tg_buff
+                                for item in batch
                                 if isinstance(item[0], str)
                                 and (
                                     not item[1]
@@ -406,7 +410,7 @@ class TelegramLogsHandler(logging.Handler):
                 topic_id = await self.get_logs_topic_id_by_client(client_id)
 
                 funcs = []
-                for item in self.tg_buff:
+                for item in batch:
                     if not isinstance(item[0], HerokuException):
                         continue
                     if not (not item[1] or item[1] == client_id or self.force_send_all):
@@ -447,7 +451,8 @@ class TelegramLogsHandler(logging.Handler):
                 )
             )
 
-            self.tg_buff = []
+            if self.tg_buff is buffer:
+                del buffer[: len(batch)]
 
             for client_id in destinations:
                 if client_id not in self._queue:
@@ -507,10 +512,9 @@ class TelegramLogsHandler(logging.Handler):
                 except Exception:
                     logging.debug("Failed to send log message", exc_info=True)
                     break
-            if attempt > 2:
+            else:
                 logging.debug(
                     "Failed to send log message after retries, skipping",
-                    exc_info=True,
                 )
 
     def emit(self, record: logging.LogRecord):

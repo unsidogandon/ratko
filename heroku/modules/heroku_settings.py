@@ -532,12 +532,3 @@ class HerokuSettingsMod(loader.Module):
             message=message,
             reply_markup=self._get_settings_markup(),
         )
-
-    def _get_all_IDM(self, module: str):
-        return {
-            getattr(getattr(self.lookup(module), name), "name", name): getattr(
-                self.lookup(module), name
-            )
-            for name in dir(self.lookup(module))
-            if getattr(getattr(self.lookup(module), name), "is_debug_method", False)
-        }

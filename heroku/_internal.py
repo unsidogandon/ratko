@@ -121,11 +121,6 @@ def redact(text):
     return text
 
 
-class RedactingFormatter(logging.Formatter):
-    def format(self, record):
-        return redact(super().format(record))
-
-
 class PrivateRotatingFileHandler(RotatingFileHandler):
     def _open(self):
         stream = super()._open()

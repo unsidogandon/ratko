@@ -578,7 +578,6 @@ class Modules:
         allclients: list,
         translator: Translator,
     ):
-        self._initial_registration = True
         self.commands = {}
         self._command_handlers = {}
         self.inline_handlers = {}
@@ -587,7 +586,6 @@ class Modules:
         self.modules: list["Module" | None] = []  # skipcq: PTC-W0052
         self.libraries = []
         self.watchers = []
-        self._log_handlers = []
         self._core_commands = []
         self.__approve = []
         self.allclients = allclients
@@ -612,8 +610,18 @@ class Modules:
             inline_handlers = {}
             callback_handlers = {}
             watchers = []
+            disabled = set(self._db.get(main.__name__, "disabled_modules", []))
+            disabled_commands = self._db.get(main.__name__, "disabled_commands", {})
             for module in self.modules:
+                module_name = module.__class__.__name__
+                if module_name in disabled or getattr(module, "_unloading", False):
+                    continue
+                blocked = {
+                    name.lower() for name in disabled_commands.get(module_name, [])
+                }
                 for name, handler in module.heroku_commands.items():
+                    if name.lower() in blocked:
+                        continue
                     commands[name.lower()] = handler
                     command_handlers.setdefault(name.lower(), []).append(handler)
                 inline_handlers.update(module.heroku_inline_handlers)
@@ -826,8 +834,17 @@ class Modules:
         for alias, cmd in aliases.items():
             self.add_alias(alias, *cmd.split(maxsplit=1))
 
+    def _is_module_disabled(self, instance: Module) -> bool:
+        """Respect persisted legacy disables without changing account data."""
+        return getattr(instance, "_unloading", False) or (
+            instance.__class__.__name__
+            in self._db.get(main.__name__, "disabled_modules", [])
+        )
+
     def register_raw_handlers(self, instance: Module):
         """Register event handlers for a module"""
+        if self._is_module_disabled(instance):
+            return
         for name, handler in utils.iter_attrs(instance):
             if getattr(handler, "is_raw_handler", False):
                 self.client.dispatcher.raw_handlers.append(handler)
@@ -840,6 +857,8 @@ class Modules:
 
     def register_bot_update_handlers(self, instance: Module):
         """Register bot update handlers for a module"""
+        if self._is_module_disabled(instance):
+            return
         for name, handler in utils.iter_attrs(instance):
             if not getattr(handler, "is_bot_update_handler", False):
                 continue
@@ -889,7 +908,17 @@ class Modules:
                 map(lambda x: x.lower(), list(instance.heroku_commands))
             )
 
+        if self._is_module_disabled(instance):
+            return
+        blocked = {
+            name.lower()
+            for name in self._db.get(main.__name__, "disabled_commands", {}).get(
+                instance.__class__.__name__, []
+            )
+        }
         for _command, cmd in instance.heroku_commands.items():
+            if _command.lower() in blocked:
+                continue
             # Restrict overwriting core modules' commands
             if (
                 not self._remove_core_protection
@@ -915,6 +944,8 @@ class Modules:
         self.register_inline_stuff(instance)
 
     def register_inline_stuff(self, instance: Module):
+        if self._is_module_disabled(instance):
+            return
         for name, func in instance.heroku_inline_handlers.copy().items():
             if name.lower() in self.inline_handlers:
                 if (
@@ -1009,6 +1040,8 @@ class Modules:
 
     def register_watchers(self, instance: Module):
         """Register watcher from instance"""
+        if self._is_module_disabled(instance):
+            return
         with contextlib.suppress(AttributeError):
             _heroku_client_id_logging_tag = copy.copy(self.client.tg_id)  # noqa: F841
 

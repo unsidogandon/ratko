@@ -572,15 +572,6 @@ class LoaderMod(loader.Module):
             logger.exception("Failed to install external module %s", module_name)
             return MODULE_LOADING_FAILED
 
-    async def _inline__load(
-        self,
-        call: InlineCall,
-        doc: str,
-        path_: str,
-        mode: str,
-    ):
-        await self.load_module(doc, call, origin=path_ or "<string>", save_fs=True)
-
     @loader.command(alias="lm")
     async def loadmod(self, message: Message):
         msg = message if message.file else (await message.get_reply_message())
@@ -591,7 +582,6 @@ class LoaderMod(loader.Module):
 
         await utils.answer(message, self.strings["loading_module_via_file"])
 
-        path_ = None
         doc = await msg.download_media(bytes)
 
         try:
@@ -600,10 +590,7 @@ class LoaderMod(loader.Module):
             await utils.answer(message, self.strings["bad_unicode"])
             return
 
-        if path_ is not None:
-            await self.load_module(doc, message, origin=path_, save_fs=True)
-        else:
-            await self.load_module(doc, message, save_fs=True)
+        await self.load_module(doc, message, save_fs=True)
 
     async def approve_internal(
         self,
@@ -1859,16 +1846,6 @@ class LoaderMod(loader.Module):
         link = module.__origin__
 
         text = (
-            f"<b>🧳 {utils.escape_html(class_name)}</b>"
-            if not utils.check_url(link)
-            else (
-                f'📼 <b><a href="{link}">Link</a> for'
-                f" {utils.escape_html(class_name)}:</b>"
-                f' <code>{link}</code>\n\n{self.strings["not_exact"] if not exact else ""}'
-            )
-        )
-
-        text = (
             self.strings["link"].format(
                 class_name=utils.escape_html(class_name),
                 url=link,
@@ -1893,41 +1870,3 @@ class LoaderMod(loader.Module):
             file=file,
             reply_to=getattr(message, "reply_to_msg_id", None),
         )
-
-    def _format_result(
-        self,
-        result: dict,
-        query: str,
-        no_translate: bool = False,
-    ) -> str:
-        commands = "\n".join(
-            [
-                f"▫️ <code>{utils.escape_html(self.get_prefix())}{utils.escape_html(cmd)}</code>:"
-                f" <b>{utils.escape_html(cmd_doc)}</b>"
-                for cmd, cmd_doc in result["module"]["commands"].items()
-            ]
-        )
-
-        kwargs = {
-            "name": utils.escape_html(result["module"]["name"]),
-            "dev": utils.escape_html(result["module"]["dev"]),
-            "commands": commands,
-            "cls_doc": utils.escape_html(result["module"]["cls_doc"]),
-            "mhash": result["module"]["hash"],
-            "query": utils.escape_html(query),
-            "prefix": utils.escape_html(self.get_prefix()),
-        }
-
-        strings = (
-            self.strings.get("result", "en")
-            if self.config["translate"] and not no_translate
-            else self.strings["result"]
-        )
-
-        text = strings.format(**kwargs)
-
-        if len(text) > 1980:
-            kwargs["commands"] = "..."
-            text = strings.format(**kwargs)
-
-        return text

@@ -189,59 +189,6 @@ class SudoMessageEditor(MessageEditor):
                 await self.redraw()
 
 
-class RawMessageEditor(SudoMessageEditor):
-    def __init__(
-        self,
-        message,
-        command,
-        config,
-        strings,
-        request_message,
-        show_done=False,
-    ):
-        super().__init__(message, command, config, strings, request_message)
-        self.show_done = show_done
-
-    async def redraw(self):
-        logger.debug(self.rc)
-
-        match self.rc:
-            case None:
-                text = (
-                    "<code>"
-                    + utils.escape_html(self.stdout[max(len(self.stdout) - 4095, 0) :])
-                    + "</code>"
-                )
-            case 0:
-                text = (
-                    "<code>"
-                    + utils.escape_html(self.stdout[max(len(self.stdout) - 4090, 0) :])
-                    + "</code>"
-                )
-            case _:
-                text = (
-                    "<code>"
-                    + utils.escape_html(self.stderr[max(len(self.stderr) - 4095, 0) :])
-                    + "</code>"
-                )
-
-        if self.rc is not None and self.show_done:
-            text += "\n" + self.strings["done"]
-
-        logger.debug(text)
-
-        with contextlib.suppress(
-            herokutl.errors.rpcerrorlist.MessageNotModifiedError,
-            herokutl.errors.rpcerrorlist.MessageEmptyError,
-            ValueError,
-        ):
-            try:
-                await utils.answer(self.message, text)
-            except herokutl.errors.rpcerrorlist.MessageTooLongError as e:
-                logger.error(e)
-                logger.error(text)
-
-
 class InlineMessageEditor:
     """Streams command output into an inline form via form.edit()"""
 

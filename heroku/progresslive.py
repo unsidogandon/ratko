@@ -1,34 +1,19 @@
-import contextlib
-import os
-import select
 import shutil
 import sys
 import threading
-
-with contextlib.suppress(ImportError):
-    import termios
-    import tty
 
 
 class StartupLiveDisplay:
     def __init__(self, enabled: bool = True, base_steps: int = 6):
         self.enabled = bool(enabled)
-        self.base_steps = base_steps
         self.total_steps = base_steps
         self.completed_steps = 0
-        self.module_total = 0
-        self.module_completed = 0
         self.current_label = "boot"
-        self.recent_files = []
         self._stage = "boot"
         self._rendered = False
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread = None
-        self._keyboard_stop_event = threading.Event()
-        self._keyboard_thread = None
-        self._stdin_fd = None
-        self._stdin_attrs = None
         self._spinner_index = 0
         self._spinner = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
         self._hint = "логи сохраняються в ratko.log в корне ратко юзербот"
@@ -42,8 +27,6 @@ class StartupLiveDisplay:
         width = max(self._term_size().columns - 1, 20)
         if len(text) <= width:
             return text.ljust(width)
-        if width <= 3:
-            return text[:width]
         return (text[: width - 3] + "...").ljust(width)
 
     def _bar(self) -> str:
@@ -87,51 +70,12 @@ class StartupLiveDisplay:
 
     def _render_progress(self):
         percent = min(int((self.completed_steps / max(self.total_steps, 1)) * 100), 99)
-        recent = f" | {' • '.join(self.recent_files[-2:])}" if self.recent_files else ""
         stage = f" | {self._stage}" if self._stage else ""
         self._render_line(
             self._with_hint(
-                f"{self._bar()} {percent:>3}% | load {self.current_label}{recent}{stage}"
+                f"{self._bar()} {percent:>3}% | load {self.current_label}{stage}"
             )
         )
-
-    def _disable(self):
-        self.enabled = False
-        self._stop_event.set()
-        rows = max(self._term_size().lines, 2)
-        sys.stdout.write(f"\0337\033[{rows};1H\033[2K\0338")
-        sys.stdout.flush()
-
-    def _keyboard_loop(self):
-        if not hasattr(sys.stdin, "isatty") or not sys.stdin.isatty():
-            return
-        if "termios" not in globals() or "tty" not in globals():
-            return
-        try:
-            self._stdin_fd = sys.stdin.fileno()
-            self._stdin_attrs = termios.tcgetattr(self._stdin_fd)
-            tty.setcbreak(self._stdin_fd)
-        except Exception:
-            return
-        try:
-            while not self._keyboard_stop_event.is_set() and not self._stop_event.is_set():
-                try:
-                    ready, _, _ = select.select([self._stdin_fd], [], [], 0.2)
-                except Exception:
-                    break
-                if not ready:
-                    continue
-                try:
-                    char = os.read(self._stdin_fd, 1).decode("utf-8", errors="ignore")
-                except Exception:
-                    break
-                if char.lower() == "f":
-                    self._disable()
-                    break
-        finally:
-            if self._stdin_fd is not None and self._stdin_attrs is not None:
-                with contextlib.suppress(Exception):
-                    termios.tcsetattr(self._stdin_fd, termios.TCSADRAIN, self._stdin_attrs)
 
     def _loop(self):
         while not self._stop_event.is_set():
@@ -146,22 +90,12 @@ class StartupLiveDisplay:
             return
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
-        # Keyboard shortcut is intentionally disabled.
 
     def stop(self):
         self._stop_event.set()
-        self._keyboard_stop_event.set()
         if self._thread is not None:
             self._thread.join(timeout=0.2)
             self._thread = None
-        if self._keyboard_thread is not None:
-            self._keyboard_thread.join(timeout=0.2)
-            self._keyboard_thread = None
-        if self._stdin_fd is not None and self._stdin_attrs is not None:
-            with contextlib.suppress(Exception):
-                termios.tcsetattr(self._stdin_fd, termios.TCSADRAIN, self._stdin_attrs)
-            self._stdin_fd = None
-            self._stdin_attrs = None
         if self.enabled and self._rendered:
             rows = max(self._term_size().lines, 2)
 
@@ -182,35 +116,12 @@ class StartupLiveDisplay:
             self._last_row = None
             self._occupied_rows.clear()
 
-    def set_module_total(self, count: int):
-        with self._lock:
-            self.module_total = max(count, 0)
-            self.total_steps = self.base_steps + self.module_total
-            self._stage = "scan"
-            self._render_progress()
-
     def stage(self, label: str, *, advance: bool = False, stage: str | None = None):
         with self._lock:
             self.current_label = label
             self._stage = stage.lower() if stage else ""
             if advance:
                 self.completed_steps += 1
-            self._render_progress()
-
-    def module_started(self, filename: str):
-        with self._lock:
-            self.current_label = f"/{filename}"
-            self._stage = f"{self.module_completed + 1}/{self.module_total}" if self.module_total else "mods"
-            self._render_progress()
-
-    def module_finished(self, filename: str, ok: bool = True):
-        with self._lock:
-            self.module_completed += 1
-            self.completed_steps += 1
-            self.current_label = f"/{filename}"
-            self.recent_files.append(filename if ok else f"!{filename}")
-            self.recent_files = self.recent_files[-2:]
-            self._stage = f"{self.module_completed}/{self.module_total}" if self.module_total else "mods"
             self._render_progress()
 
     def finalize(self):

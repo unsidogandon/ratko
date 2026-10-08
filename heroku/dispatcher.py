@@ -616,12 +616,6 @@ class CommandDispatcher:
                 )
             else:
                 txt = (
-                    "<tg-emoji emoji-id=5877477244938489129>🚫</tg-emoji> <b>Call"
-                    f" </b><code>{utils.escape_html(message.message)}</code><b> failed"
-                    " due to RPC (Telegram) error:</b>"
-                    f" <code>{utils.escape_html(str(exc))}</code>"
-                )
-                txt = (
                     self._client.loader.lookup("translations")
                     .strings("rpc_error")
                     .format(

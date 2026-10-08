@@ -156,7 +156,7 @@ class List(InlineUnit):
             "strings": strings,
             "premium_emoji_pre_edit": first_page_needs_premium_emoji_pre_edit,
             "future": asyncio.Event(),
-            **({"ttl": round(time.time()) + ttl} if ttl else {}),
+            "ttl": time.time() + (ttl or self._markup_ttl),
             **({"force_me": force_me} if force_me else {}),
             **({"disable_security": disable_security} if disable_security else {}),
             **({"on_unload": on_unload} if callable(on_unload) else {}),
@@ -322,6 +322,7 @@ class List(InlineUnit):
                 unit_id=unit_id,
             )
             + [[{"text": "🔻 Close", "callback": callback, "args": ("close",)}]],
+            unit_id=unit_id,
         )
 
     async def _list_inline_handler(self: "InlineManager", inline_query):

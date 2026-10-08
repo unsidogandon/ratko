@@ -184,9 +184,22 @@ class InlineManager(
     async def _cleaner(self):
         """Cleans outdated inline units"""
         while True:
+            now = time.time()
             for unit_id, unit in self._units.copy().items():
-                if (unit.get("ttl") or (time.time() + self._markup_ttl)) < time.time():
+                if not unit.get("ttl"):
+                    unit["ttl"] = now + self._markup_ttl
+                if unit["ttl"] <= now:
                     await self._unload_unit(unit_id)
+
+            for callback_id, callback in self._custom_map.copy().items():
+                if callback.get("unit_id") is not None:
+                    if callback["unit_id"] not in self._units:
+                        self._custom_map.pop(callback_id, None)
+                    continue
+                if not callback.get("ttl"):
+                    callback["ttl"] = now + self._markup_ttl
+                if callback["ttl"] <= now:
+                    self._custom_map.pop(callback_id, None)
 
             await asyncio.sleep(5)
 

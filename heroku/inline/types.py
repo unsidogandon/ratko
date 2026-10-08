@@ -33,7 +33,9 @@ class InlineMessage:
         rich_message = kwargs.pop("rich_message", None)
         if rich_message is not None:
             rich_markup = (
-                self.inline_manager.generate_markup(kwargs.get("reply_markup"))
+                self.inline_manager.generate_markup(
+                    kwargs.get("reply_markup"), unit_id=self.unit_id
+                )
                 if kwargs.get("reply_markup") is not None
                 else None
             )
@@ -196,7 +198,9 @@ class BotInlineMessage:
         rich_message = kwargs.pop("rich_message", None)
         if rich_message is not None:
             rich_markup = (
-                self.inline_manager.generate_markup(kwargs.get("reply_markup"))
+                self.inline_manager.generate_markup(
+                    kwargs.get("reply_markup"), unit_id=self.unit_id
+                )
                 if kwargs.get("reply_markup") is not None
                 else None
             )

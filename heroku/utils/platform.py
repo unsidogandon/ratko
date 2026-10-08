@@ -130,22 +130,7 @@ def get_platform_emoji() -> str:
         )
     )
 
-    match True:
-
-        case _ if IS_HIKKAHOST:
-            return BASE.format(5451886105194440191)
-
-        case _ if IS_JAMHOST:
-            return BASE.format(5451886105194440191)
-
-        case _ if IS_USERLAND:
-            return BASE.format(5451886105194440191)
-
-        case _ if IS_DOCKER:
-            return BASE.format(5451886105194440191)
-
-        case _:
-            return BASE.format(5451886105194440191)
+    return BASE.format(5451886105194440191)
 
 
 def uptime() -> int:

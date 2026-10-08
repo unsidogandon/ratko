@@ -226,7 +226,7 @@ class Gallery(InlineUnit):
             "photos": [photo_url] if isinstance(photo_url, str) else photo_url,
             "current_index": 0,
             "future": asyncio.Event(),
-            **({"ttl": round(time.time()) + ttl} if ttl else {}),
+            "ttl": time.time() + (ttl or self._markup_ttl),
             **({"force_me": force_me} if force_me else {}),
             **({"disable_security": disable_security} if disable_security else {}),
             **({"on_unload": on_unload} if callable(on_unload) else {}),
@@ -458,44 +458,6 @@ class Gallery(InlineUnit):
             )
         )
 
-    async def _gallery_back(
-        self: "InlineManager",
-        call,
-        unit_id: str | None = None,
-    ):
-        queue = self._units[unit_id]["photos"]
-
-        if not queue:
-            await call.answer("No way back", show_alert=True)
-            return
-
-        self._units[unit_id]["current_index"] -= 1
-
-        if self._units[unit_id]["current_index"] < 0:
-            self._units[unit_id]["current_index"] = 0
-            await call.answer("No way back")
-            return
-
-        try:
-            media, caption, force_document = self._get_current_media(unit_id)
-            await self._bot_client.edit_message(
-                call.inline_message_id,
-                caption,
-                parse_mode="HTML",
-                file=media,
-                force_document=force_document,
-                buttons=self._gallery_markup(unit_id),
-            )
-        except FloodWaitError as e:
-            await call.answer(
-                f"Got FloodWait. Wait for {e.seconds} seconds",
-                show_alert=True,
-            )
-        except Exception:
-            logger.exception("Exception while trying to edit media")
-            await call.answer("Error occurred", show_alert=True)
-            return
-
     def _get_current_media(
         self: "InlineManager",
         unit_id: str,
@@ -685,7 +647,8 @@ class Gallery(InlineUnit):
                     ]
                 ]
             )
-            + [[{"text": "🔻 Close", "callback": callback, "args": ("close",)}]]
+            + [[{"text": "🔻 Close", "callback": callback, "args": ("close",)}]],
+            unit_id=unit_id,
         )
 
     async def _gallery_inline_handler(self: "InlineManager", inline_query):

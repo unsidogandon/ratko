@@ -15,6 +15,7 @@ import json
 import logging
 import typing
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from ruamel.yaml import YAML
 
@@ -109,33 +110,31 @@ class BaseTranslator:
             case _:
                 content = yaml.load(content)
 
-        if all(len(key) == 2 for key in content):
+        if not isinstance(content, dict):
+            raise ValueError("Translation pack must be a mapping")
+
+        def flatten(pack):
             return {
-                language: {
-                    {
-                        (
-                            f"{module.strip('$')}.{key}"
-                            if module.startswith("$")
-                            else f"{prefix}{module}.{key}"
-                        ): value
-                        for module, strings in pack.items()
-                        for key, value in strings.items()
-                        if key != "name"
-                    }
-                }
-                for language, pack in content.items()
+                (
+                    f"{module.strip('$')}.{key}"
+                    if module.startswith("$")
+                    else f"{prefix}{module}.{key}"
+                ): value
+                for module, strings in pack.items()
+                for key, value in strings.items()
+                if key != "name"
             }
 
-        return {
-            (
-                f"{module.strip('$')}.{key}"
-                if module.startswith("$")
-                else f"{prefix}{module}.{key}"
-            ): value
-            for module, strings in content.items()
-            for key, value in strings.items()
-            if key != "name"
-        }
+        # Detect the nesting, not the length of a language/module name. This
+        # supports named packs like unsido and modules with two-letter names.
+        if content and all(
+            isinstance(pack, dict)
+            and all(isinstance(strings, dict) for strings in pack.values())
+            for pack in content.values()
+        ):
+            return {language: flatten(pack) for language, pack in content.items()}
+
+        return flatten(content)
 
     def getkey(self, key: str) -> typing.Any:
         return self._data.get(key, False)
@@ -260,8 +259,10 @@ class Translator(BaseTranslator):
                     try:
                         data = self._get_pack_raw(
                             await utils.run_sync(fetch_text, language),
-                            language.split(".")[-1],
+                            Path(urlsplit(language).path).suffix,
                         )
+                        if data and all(isinstance(pack, dict) for pack in data.values()):
+                            data = self._select_module_language(data)
                     except Exception:
                         logger.exception("Unable to decode %s", language)
                         continue

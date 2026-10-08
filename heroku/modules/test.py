@@ -159,7 +159,7 @@ class TestMod(loader.Module):
         for handler in logging.getLogger().handlers:
             handler.buffer = []
             handler.handledbuffer = []
-            handler.tg_buff = ""
+            handler.tg_buff = []
 
         await utils.answer(message, self.strings["logs_cleared"])
 

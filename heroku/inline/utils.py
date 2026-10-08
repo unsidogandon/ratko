@@ -13,11 +13,13 @@
 import asyncio
 import contextlib
 import functools
+import inspect
 import io
 import itertools
 import logging
 import os
 import re
+import time
 import typing
 from collections.abc import Callable
 from copy import deepcopy
@@ -75,6 +77,8 @@ class Utils(InlineUnit):
     def _generate_markup(
         self: "InlineManager",
         markup_obj: HerokuReplyMarkup | str | None,
+        *,
+        unit_id: str | None = None,
     ) -> list[list[typing.Any]] | None:
         """Generate markup for form or list of `dict`s"""
         if not markup_obj:
@@ -82,6 +86,9 @@ class Utils(InlineUnit):
 
         if hasattr(markup_obj, "SUBCLASS_OF_ID"):
             return markup_obj
+
+        if isinstance(markup_obj, str):
+            unit_id = markup_obj
 
         markup = []
 
@@ -158,7 +165,8 @@ class Utils(InlineUnit):
                         case _ if "callback" in button:
                             btn_kwargs["data"] = button["_callback_data"]
 
-                            if setup_callbacks:
+                            previous = self._custom_map.get(button["_callback_data"], {})
+                            if setup_callbacks or not previous:
                                 self._custom_map[button["_callback_data"]] = {
                                     "handler": button["callback"],
                                     "always_allow": button.get("always_allow", [])
@@ -169,7 +177,14 @@ class Utils(InlineUnit):
                                     "disable_security": button.get(
                                         "disable_security", False
                                     ),
+                                    "ttl": previous.get("ttl")
+                                    or time.time() + self._markup_ttl,
+                                    "unit_id": previous.get("unit_id"),
                                 }
+                            if unit_id in self._units:
+                                self._custom_map[button["_callback_data"]][
+                                    "unit_id"
+                                ] = unit_id
 
                         case _ if "input" in button:
                             btn_kwargs["switch_inline_query_current_chat"] = (
@@ -463,7 +478,7 @@ class Utils(InlineUnit):
                 await self._bot_client.edit_message(
                     inline_message_id or chat_id,
                     (unit.get("text") or "") if inline_message_id else message_id,
-                    buttons=self.generate_markup(reply_markup),
+                    buttons=self.generate_markup(reply_markup, unit_id=unit_id),
                 )
             except Exception:
                 return False
@@ -486,7 +501,8 @@ class Utils(InlineUnit):
                     buttons=self.generate_markup(
                         reply_markup
                         if isinstance(reply_markup, list)
-                        else unit.get("buttons", [])
+                        else unit.get("buttons", []),
+                        unit_id=unit_id,
                     ),
                 )
             except MessageNotModifiedError:
@@ -513,7 +529,8 @@ class Utils(InlineUnit):
                             buttons=self.generate_markup(
                                 reply_markup
                                 if isinstance(reply_markup, list)
-                                else unit.get("buttons", [])
+                                else unit.get("buttons", []),
+                                unit_id=unit_id,
                             ),
                         )
                         commit_unit_update()
@@ -537,7 +554,8 @@ class Utils(InlineUnit):
                 buttons=self.generate_markup(
                     reply_markup
                     if isinstance(reply_markup, list)
-                    else unit.get("buttons", [])
+                    else unit.get("buttons", []),
+                    unit_id=unit_id,
                 ),
             )
         except FloodWaitError as e:
@@ -597,18 +615,32 @@ class Utils(InlineUnit):
 
     async def _unload_unit(self: "InlineManager", unit_id: str) -> bool:
         """Params `self`, `unit_id` are for internal use only, do not try to pass them"""
-        try:
-            if "on_unload" in self._units[unit_id] and callable(
-                self._units[unit_id]["on_unload"]
-            ):
-                self._units[unit_id]["on_unload"]()
-
-            if unit_id in self._units:
-                del self._units[unit_id]
-            else:
-                return False
-        except Exception:
+        unit = self._units.get(unit_id)
+        if unit is None or unit.get("_unloading"):
             return False
+
+        unit["_unloading"] = True
+        try:
+            if callable(unit.get("on_unload")):
+                result = unit["on_unload"]()
+                if inspect.isawaitable(result):
+                    await result
+        except Exception:
+            logger.exception("Inline unit %s failed during on_unload", unit_id)
+        finally:
+            self._units.pop(unit_id, None)
+            callback_ids = {
+                button.get("_callback_data")
+                for key in ("buttons", "custom_buttons")
+                for row in unit.get(key, [])
+                for button in row
+                if isinstance(button, dict)
+            }
+            for callback_id, callback in self._custom_map.copy().items():
+                if callback.get("unit_id") == unit_id or (
+                    callback.get("unit_id") is None and callback_id in callback_ids
+                ):
+                    self._custom_map.pop(callback_id, None)
 
         return True
 

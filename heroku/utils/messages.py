@@ -371,7 +371,9 @@ async def _edit_inline_rich_message(
             ttl=600,
         )
     rich_markup = (
-        message.inline_manager.generate_markup(reply_markup)
+        message.inline_manager.generate_markup(
+            reply_markup, unit_id=getattr(message, "unit_id", None)
+        )
         if reply_markup is not None
         else None
     )

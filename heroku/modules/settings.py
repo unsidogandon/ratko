@@ -10,7 +10,6 @@
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
-import contextlib
 import getpass
 
 import herokutl
@@ -510,99 +509,6 @@ class CoreMod(loader.Module):
         await utils.answer(call, self.strings["db_cleared"])
 
     @loader.command()
-    async def togglecmdcmd(self, message: Message):
-        """Toggle disable specific command of a module: togglecmd <module> <command> or togglecmd <command>"""
-        args = utils.get_args(message)
-        if not args:
-            await utils.answer(message, self.strings["wrong_usage_tcc"])
-
-        if args and len(args) >= 2:
-            mod_arg, cmd = args[0], args[1]
-            mod_inst = self.allmodules.lookup(mod_arg)
-            if not mod_inst:
-                await utils.answer(message, self.strings["mod404"].format(mod_arg))
-
-        module_key = mod_inst.__class__.__name__
-
-        disabled_commands = self._db.get(main.__name__, "disabled_commands", {})
-        current = [x for x in disabled_commands.get(module_key, [])]
-
-        if cmd.lower() not in [c.lower() for c in mod_inst.heroku_commands.keys()]:
-            await utils.answer(message, self.strings["cmd404"])
-
-        if any(c.lower() == cmd.lower() for c in current):
-            current = [c for c in current if c.lower() != cmd.lower()]
-            if current:
-                disabled_commands[module_key] = current
-            else:
-                disabled_commands.pop(module_key, None)
-
-            self._db.set(main.__name__, "disabled_commands", disabled_commands)
-            try:
-                self.allmodules.register_commands(mod_inst)
-            except Exception:
-                pass
-
-            await utils.answer(
-                message, self.strings["cmd_enabled"].format(cmd, module_key)
-            )
-        else:
-            current.append(cmd)
-            disabled_commands[module_key] = current
-            self._db.set(main.__name__, "disabled_commands", disabled_commands)
-
-            try:
-                self.allmodules.commands.pop(cmd.lower(), None)
-            except Exception:
-                pass
-
-            for alias, target in list(self.allmodules.aliases.items()):
-                if target.split()[0].lower() == cmd.lower():
-                    self.allmodules.aliases.pop(alias, None)
-
-            await utils.answer(
-                message, self.strings["cmd_disabled"].format(cmd, module_key)
-            )
-
-    @loader.command()
-    async def togglemod(self, message: Message):
-        """Toggle disable entire module: togglemod <module>"""
-        args = utils.get_args(message)
-        if not args:
-            await utils.answer(message, self.strings["wrong_usage_tmc"])
-
-        mod_arg = args[0]
-        mod_inst = self.allmodules.lookup(mod_arg)
-        if not mod_inst:
-            await utils.answer(message, self.strings["mod404"].format(mod_arg))
-
-        module_key = mod_inst.__class__.__name__
-        disabled = self._db.get(main.__name__, "disabled_modules", [])
-
-        if module_key in disabled:
-            disabled = [m for m in disabled if m != module_key]
-            self._db.set(main.__name__, "disabled_modules", disabled)
-            try:
-                self.allmodules.register_commands(mod_inst)
-                self.allmodules.register_watchers(mod_inst)
-                self.allmodules.register_raw_handlers(mod_inst)
-                self.allmodules.register_inline_stuff(mod_inst)
-            except Exception:
-                pass
-            await utils.answer(message, self.strings["mod_enabled"].format(module_key))
-        else:
-            disabled += [module_key]
-            self._db.set(main.__name__, "disabled_modules", disabled)
-            try:
-                self.allmodules.unregister_commands(mod_inst, "disable")
-                self.allmodules.unregister_watchers(mod_inst, "disable")
-                self.allmodules.unregister_raw_handlers(mod_inst, "disable")
-                self.allmodules.unregister_inline_stuff(mod_inst, "disable")
-            except Exception:
-                pass
-            await utils.answer(message, self.strings["mod_disabled"].format(module_key))
-
-    @loader.command()
     async def clearmodule(self, message: Message):
         """Clear all DB entries for module: clearmodule <module>"""
         args = utils.get_args(message)
@@ -642,11 +548,3 @@ class CoreMod(loader.Module):
             reply_markup=self._markup(),
             photo="https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",
         )
-
-    async def _inline__choose__installation(self, call: InlineCall, platform: str):
-        with contextlib.suppress(Exception):
-            await utils.answer(
-                call,
-                self.strings[f"{platform}_install"],
-                reply_markup=self._markup(),
-            )

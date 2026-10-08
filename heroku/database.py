@@ -329,11 +329,12 @@ class Database(dict):
         self._last_saved_data = None
 
     def process_db_autofix(self, db: dict) -> bool:
-        if not utils.is_serializable(db):
+        if not isinstance(db, dict) or not utils.is_serializable(db):
             return False
 
         for key, value in db.copy().items():
             if not isinstance(key, (str, int)):
+                del db[key]
                 logger.warning(
                     "DbAutoFix: Dropped key %s, because it is not string or int",
                     key,
@@ -351,7 +352,7 @@ class Database(dict):
                 )
                 continue
 
-            for subkey in value:
+            for subkey in list(value):
                 if not isinstance(subkey, (str, int)):
                     del db[key][subkey]
                     logger.warning(

@@ -176,6 +176,9 @@ vendor/
 Pipfile.lock
 
 heroku.log.*
+ratko.log.*
+config-*.json*.tmp
+.config*.json*.tmp
 unknown_errors.txt
 
 # Local runtime artifacts
