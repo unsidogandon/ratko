@@ -413,7 +413,7 @@ class TelegramLogsHandler(logging.Handler):
                                             self._mods[client_id].inline.bot,
                                             item[0],
                                         ),
-                                        "disable_security": True,
+                                        "force_me": True,
                                     },
                                 ],
                             ),
