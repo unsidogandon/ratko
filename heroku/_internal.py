@@ -59,7 +59,10 @@ def register_secret(value):
     elif isinstance(value, (list, tuple, set)):
         for item in value:
             register_secret(item)
-    elif isinstance(value, str) and len(value) >= 4:
+    elif isinstance(value, str) and (len(value) >= 8 or not value.isalnum()):
+        # Короткие чисто-буквенные значения не регистрируем: substring-замена
+        # такого секрета калечит логи (например, пароль "ratko" затирал имя
+        # логгера). Контекстные паттерны ниже всё равно ловят password: xxx
         _secrets.update((value, html.escape(value), quote(value, safe="")))
         if ":" in value:
             _secrets.add(base64.b64encode(value.encode()).decode())
