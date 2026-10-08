@@ -29,7 +29,11 @@ from herokutl.tl.functions.channels import EditTitleRequest
 from herokutl.tl.types import Message, User
 
 from . import main, utils
-from ._internal import register_exit_flusher, register_secrets
+from ._internal import (
+    register_exit_flusher,
+    register_secret_if_named,
+    register_secrets,
+)
 from .pointers import (
     BaseSerializingMiddlewareDict,
     BaseSerializingMiddlewareList,
@@ -221,7 +225,7 @@ class Database(dict):
                         "channel; resetting it",
                         existing_channel_id,
                     )
-                    break
+                    continue
                 content_channel = dialog.entity
                 logger.debug(
                     "Found existing content channel with ID %s in database",
@@ -543,7 +547,7 @@ class Database(dict):
             )
 
         super().setdefault(owner, {})[key] = value
-        register_secrets({key: value})
+        register_secret_if_named(key, value)
         return self._schedule_save()
 
     def __setitem__(self, owner: str, value: JSONSerializable) -> None:

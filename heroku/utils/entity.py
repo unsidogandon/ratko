@@ -223,7 +223,7 @@ async def is_private_asset_channel(
 ) -> bool:
     """Check that the peer is a private channel created by the account itself"""
     try:
-        entity = await client.get_entity(peer, force=True)
+        entity = await client.get_entity(peer)
         if (
             not isinstance(entity, Channel)
             or not entity.creator

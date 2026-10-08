@@ -494,7 +494,7 @@ heroku_info:
   _ihandle_doc_info: "Отправiть iнформацiю о юзiрботi"
   up-to-date: "<b>Актуальная вiрсiя</b>"
   update_required: "<b>Трiбуiтся обновлiнii</b> <code>{prefix}update</code>"
-  _cfg_cst_msg: "Кастомный тiкст сообщiнiя в info. Можiт содiржать ключiвыi слова {me}, {version}, {build}, {prefix}, {platform}, {upd}, {uptime}, {cpu_usage}, {ram_usage}, {branch}, {hostname}, {user}, {os}, {kernel}, {cpu}, {ping}, {python_ver}, {htl_ver}, {git_status}"
+  _cfg_cst_msg: "Кастомный тiкст сообщiнiя в info. Можiт содiржать ключiвыi слова {me}, {version}, {build}, {prefix}, {platform}, {upd}, {uptime}, {cpu_usage}, {ram_usage}, {swap_usage}, {branch}, {hostname}, {user}, {os}, {kernel}, {cpu}, {ping}, {python_ver}, {htl_ver}, {git_status}"
   _cfg_cst_ph: "🤖Кастомныi плiйсхолдiры: {}"
   _cfg_cst_btn: "Кастомная кнопка в сообщiнii в info. Оставь пустым, чтобы убрать кнопку"
   _cfg_banner: "Ссылка на баннiр-картiнку"

@@ -90,6 +90,12 @@ def register_secrets(data):
             register_secrets(value)
 
 
+def register_secret_if_named(key, value):
+    """Single-key check for hot paths (db.set): no recursion into containers"""
+    if _secret_names.search(str(key)):
+        register_secret(value)
+
+
 def redact(text):
     """Replace all registered and pattern-matched secrets with [REDACTED]"""
     text = str(text)

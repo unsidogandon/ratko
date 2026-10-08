@@ -554,7 +554,7 @@ heroku_info:
   update_required: "<b>Upd473 r3qu1r3d</b> <code>{prefix}update</code>"
   switchinfo_on: "<tg-emoji emoji-id=5118861066981344121>✅</tg-emoji> 1m4g3 1nf0 7urn3d 0n 5ucc355fully"
   switchinfo_off: "<tg-emoji emoji-id=5118861066981344121>✅</tg-emoji> 1m4g3 1nf0 7urn3d 0ff 5ucc355fully"
-  _cfg_cst_msg: "Cu570m m5g 4 1nf0. M4y c0n741n {me}, {version}, {build}, {prefix}, {platform}, {upd}, {uptime}, {cpu_usage}, {ram_usage}, {branch}, {hostname}, {user}, {os}, {kernel}, {cpu}, {ping}, {python_ver}, {htl_ver}, {git_status} k3yw0rd5"
+  _cfg_cst_msg: "Cu570m m5g 4 1nf0. M4y c0n741n {me}, {version}, {build}, {prefix}, {platform}, {upd}, {uptime}, {cpu_usage}, {ram_usage}, {swap_usage}, {branch}, {hostname}, {user}, {os}, {kernel}, {cpu}, {ping}, {python_ver}, {htl_ver}, {git_status} k3yw0rd5"
   _cfg_cst_ph: "🤖Cu570m pl4c3h0ld3r5: {}"
   _cfg_cst_btn: "Cu570m bu770n 4 1nf0. L34v3 3mp7y 2 r3m0v3 bu770n"
   _cfg_banner: "URL 2 1m4g3 b4nn3r"

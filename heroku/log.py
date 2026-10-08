@@ -254,7 +254,7 @@ class TelegramLogsHandler(logging.Handler):
         self.capacity = capacity
         self.lvl = logging.NOTSET
         self._send_lock = asyncio.Lock()
-        self._unsafe_destinations_warned = False
+        self._unsafe_destinations_warned = set()
 
     def install_tg_log(self, mod: Module):
         if getattr(self, "_task", False):
@@ -349,17 +349,19 @@ class TelegramLogsHandler(logging.Handler):
             ]
 
             if skipped := [
-                mod.logchat
+                (client_id, mod.logchat)
                 for client_id, mod in self._mods.items()
                 if client_id not in destinations
+                and client_id not in self._unsafe_destinations_warned
             ]:
-                if not self._unsafe_destinations_warned:
-                    self._unsafe_destinations_warned = True
-                    logging.getLogger(__name__).warning(
-                        "Skipping log delivery to unsafe destinations: %s "
-                        "(they are not private asset channels of this account)",
-                        skipped,
-                    )
+                self._unsafe_destinations_warned.update(
+                    client_id for client_id, _ in skipped
+                )
+                logging.getLogger(__name__).warning(
+                    "Skipping log delivery to unsafe destinations: %s "
+                    "(they are not private asset channels of this account)",
+                    [logchat for _, logchat in skipped],
+                )
 
             self._queue = {
                 client_id: utils.chunks(
