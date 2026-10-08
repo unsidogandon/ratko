@@ -213,6 +213,15 @@ class Database(dict):
             dialog_id = getattr(dialog.entity, "id", None)
             dialog_title = (dialog.title or "").lower()
             if existing_channel_id and dialog_id == existing_channel_id:
+                if not await utils.is_private_asset_channel(
+                    self._client, dialog.entity, allow_participants=True
+                ):
+                    logger.warning(
+                        "Saved content channel ID %s is not a private asset "
+                        "channel; resetting it",
+                        existing_channel_id,
+                    )
+                    break
                 content_channel = dialog.entity
                 logger.debug(
                     "Found existing content channel with ID %s in database",
@@ -222,7 +231,9 @@ class Database(dict):
             if dialog_title in {
                 CONTENT_CHANNEL_TITLE,
                 LEGACY_CONTENT_CHANNEL_TITLE,
-            }:
+            } and await utils.is_private_asset_channel(
+                self._client, dialog.entity, allow_participants=True
+            ):
                 titled_channel = dialog.entity
 
         if not content_channel and titled_channel:
@@ -235,7 +246,7 @@ class Database(dict):
 
         if existing_channel_id and not content_channel:
             logger.warning(
-                "Saved content channel ID %s is absent from Telegram dialogs; "
+                "Saved content channel ID %s is unavailable or unsafe; "
                 "creating a new channel",
                 existing_channel_id,
             )
@@ -265,6 +276,7 @@ class Database(dict):
                 forum=True,
                 hide_general=True,
                 _folder="Ratko",
+                allow_participants=True,
             )
         content_channel_id = int(content_channel.id)
         self.set("heroku.forums", "channel_id", content_channel_id)

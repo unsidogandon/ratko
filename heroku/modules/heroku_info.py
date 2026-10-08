@@ -51,6 +51,7 @@ DEFAULT_INFO_MESSAGE = (
     "<blockquote>upd: {upd}\n"
     "использование цп: {cpu_usage}\n"
     "использование оперативы: {ram_usage}\n"
+    "своп: {swap_usage}\n"
     "ос: {os}\n"
     "ядрышко: {kernel}\n"
     "проц: {cpu}</blockquote>"
@@ -207,6 +208,12 @@ class HerokuInfoMod(loader.Module):
             ("🍏", '<tg-emoji emoji-id="5372908412604525258">🍏</tg-emoji>'),
         ]:
             platform_emoji = platform_emoji.replace(emoji, icon)
+        swap = utils.get_swap_usage()
+        swap_usage = (
+            swap["error"]
+            if "error" in swap
+            else f"{swap['used']} MB / {swap['total']} MB ({swap['percent']}%)"
+        )
         data = {
             "me": me,
             "version": _version,
@@ -219,6 +226,7 @@ class HerokuInfoMod(loader.Module):
             "uptime": utils.formatted_uptime(),
             "cpu_usage": utils.get_cpu_usage(),
             "ram_usage": f"{utils.get_ram_usage()} MB",
+            "swap_usage": swap_usage,
             "branch": version.branch,
             "hostname": lib_platform.node(),
             "user": getpass.getuser(),

@@ -41,7 +41,7 @@ from herokutl.tl.types import (
 )
 
 from . import version
-from ._internal import fetch_text
+from ._internal import fetch_text, register_secret
 from ._reference_finder import replace_all_refs
 from .inline.types import (
     BotInlineCall,
@@ -912,6 +912,9 @@ class ConfigValue:
         ignore_validation: bool = False,
     ):
         if key == "value":
+            if getattr(self.validator, "internal_id", None) == "Hidden":
+                register_secret(value)
+                register_secret(self.default)
             try:
                 value = ast.literal_eval(value)
             except Exception:
@@ -935,6 +938,13 @@ class ConfigValue:
                         value = self.validator.validate(value)
                     except validators.ValidationError as e:
                         if not ignore_validation:
+                            if (
+                                getattr(self.validator, "internal_id", None)
+                                == "Hidden"
+                            ):
+                                raise validators.ValidationError(
+                                    "Invalid value for a hidden setting"
+                                ) from None
                             raise e
 
                         logger.debug(
@@ -968,6 +978,8 @@ class ConfigValue:
 
             # This attribute will tell the `Loader` to save this value in db
             self._save_marker = True
+            if getattr(self.validator, "internal_id", None) == "Hidden":
+                register_secret(value)
 
         object.__setattr__(self, key, value)
 

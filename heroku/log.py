@@ -254,6 +254,7 @@ class TelegramLogsHandler(logging.Handler):
         self.capacity = capacity
         self.lvl = logging.NOTSET
         self._send_lock = asyncio.Lock()
+        self._unsafe_destinations_warned = False
 
     def install_tg_log(self, mod: Module):
         if getattr(self, "_task", False):
@@ -336,6 +337,30 @@ class TelegramLogsHandler(logging.Handler):
 
     async def sender(self):
         async with self._send_lock:
+            if not self.tg_buff:
+                return
+
+            destinations = [
+                client_id
+                for client_id, mod in self._mods.items()
+                if await utils.is_private_asset_channel(
+                    mod.client, mod.logchat, allow_participants=True
+                )
+            ]
+
+            if skipped := [
+                mod.logchat
+                for client_id, mod in self._mods.items()
+                if client_id not in destinations
+            ]:
+                if not self._unsafe_destinations_warned:
+                    self._unsafe_destinations_warned = True
+                    logging.getLogger(__name__).warning(
+                        "Skipping log delivery to unsafe destinations: %s "
+                        "(they are not private asset channels of this account)",
+                        skipped,
+                    )
+
             self._queue = {
                 client_id: utils.chunks(
                     utils.escape_html(
@@ -354,11 +379,11 @@ class TelegramLogsHandler(logging.Handler):
                     ),
                     4096,
                 )
-                for client_id in self._mods
+                for client_id in destinations
             }
 
             self._exc_queue = {}
-            for client_id in self._mods:
+            for client_id in destinations:
                 topic_id = await self.get_logs_topic_id_by_client(client_id)
 
                 funcs = []
@@ -405,7 +430,7 @@ class TelegramLogsHandler(logging.Handler):
 
             self.tg_buff = []
 
-            for client_id in self._mods:
+            for client_id in destinations:
                 if client_id not in self._queue:
                     continue
 

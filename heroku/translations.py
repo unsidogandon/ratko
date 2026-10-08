@@ -10,6 +10,7 @@
 # You can redistribute it and/or modify it under the terms of the GNU AGPLv3
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
+import asyncio
 import json
 import logging
 import typing
@@ -142,21 +143,69 @@ class BaseTranslator:
     def gettext(self, text: str) -> typing.Any:
         return self.getkey(text) or text
 
+    def _get_module_pack_raw(self, content: str) -> dict | None:
+        data = yaml.load(content)
+        if not isinstance(data, dict) or any(
+            not isinstance(key, str) for key in data
+        ):
+            return None
+
+        if all(isinstance(value, str) for value in data.values()):
+            return data
+
+        if all(
+            isinstance(pack, dict)
+            and all(
+                isinstance(key, str) and isinstance(value, str)
+                for key, value in pack.items()
+            )
+            for pack in data.values()
+        ):
+            return data
+
+        return None
+
     async def load_module_translations(
-        self, pack_url: str, cache_path: Path = None
+        self, pack_url: str, cache_path: Path = None, *, cache_only: bool = False
     ) -> bool | dict:
+        if cache_only:
+            if cache_path is None:
+                return {}
+            try:
+                data = self._get_module_pack_raw(
+                    cache_path.read_text(encoding="utf-8")
+                )
+            except FileNotFoundError:
+                return {}
+            except Exception:
+                logger.warning(
+                    "Unable to decode cached %s", cache_path, exc_info=True
+                )
+                return {}
+            return (
+                self._select_module_language(data) if isinstance(data, dict) else {}
+            )
+
+        if not hasattr(self, "_module_translation_semaphore"):
+            self._module_translation_semaphore = asyncio.Semaphore(4)
         try:
-            content = await utils.run_sync(fetch_text, pack_url)
-            data = yaml.load(content)
+            async with self._module_translation_semaphore:
+                content = await utils.run_sync(fetch_text, pack_url)
+            data = self._get_module_pack_raw(content)
+            if data is None:
+                logger.warning("Invalid module translation pack from %s", pack_url)
         except Exception:
             logger.exception("Unable to decode %s", pack_url)
             data = None
             content = None
 
         if not isinstance(data, dict):
+            content = None
             if cache_path and cache_path.exists():
                 try:
-                    data = yaml.load(cache_path.read_text(encoding="utf-8"))
+                    data = self._get_module_pack_raw(
+                        cache_path.read_text(encoding="utf-8")
+                    )
                 except Exception:
                     logger.exception("Unable to decode cached %s", cache_path)
                     return False
@@ -174,7 +223,10 @@ class BaseTranslator:
             except Exception:
                 logger.exception("Failed to save `%s`'s cache copy", pack_url)
 
-        if any(len(key) != 2 for key in data):
+        return self._select_module_language(data)
+
+    def _select_module_language(self, data: dict) -> dict:
+        if all(isinstance(value, str) for value in data.values()):
             return data
 
         if lang := self.db.get(__name__, "lang", False):

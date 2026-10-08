@@ -15,6 +15,7 @@
 import getpass
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -174,7 +175,11 @@ else:
         try:
             import herokutl  # noqa: F811
 
-            if tuple(map(int, herokutl.__version__.split("."))) < (2, 0, 5):
+            ver_ = tuple(
+                int(match.group()) if (match := re.match(r"\d+", part)) else 0
+                for part in herokutl.__version__.split(".")
+            )
+            if ver_ < (2, 0, 5):
                 raise ImportError
         except ImportError:
             print("\U0001f504 Installing dependencies...")
