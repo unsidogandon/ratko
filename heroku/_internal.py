@@ -59,10 +59,19 @@ def register_secret(value):
     elif isinstance(value, (list, tuple, set)):
         for item in value:
             register_secret(item)
-    elif isinstance(value, str) and (len(value) >= 8 or not value.isalnum()):
-        # Короткие чисто-буквенные значения не регистрируем: substring-замена
-        # такого секрета калечит логи (например, пароль "ratko" затирал имя
+    elif (
+        isinstance(value, str)
+        and len(value) >= 4
+        # Отсекаем мусор: пустые/пробельные/без единого буквоцифрового
+        # символа (пустой пароль в конфиге модуля давал replace("",
+        # "[REDACTED]") между каждой буквой каждой строки лога)
+        and value.strip()
+        and any(char.isalnum() for char in value)
+        # Короткие чисто-буквенные значения не регистрируем: substring-
+        # замена такого секрета калечит логи (пароль "ratko" затирал имя
         # логгера). Контекстные паттерны ниже всё равно ловят password: xxx
+        and (len(value) >= 8 or not value.isalnum())
+    ):
         _secrets.update((value, html.escape(value), quote(value, safe="")))
         if ":" in value:
             _secrets.add(base64.b64encode(value.encode()).decode())
