@@ -281,7 +281,11 @@ class RegistryNamespaceTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_suspended_modules_keep_their_namespace(self):
         module = await self.register()
-        module.client_ready = AsyncMock(side_effect=self.namespace["SelfSuspend"]())
+
+        async def ready():
+            raise self.namespace["SelfSuspend"]()
+
+        module.client_ready = ready
         with self.assertRaises(self.namespace["SelfSuspend"]):
             await self.registry.send_ready_one(module, no_self_unload=True)
         self.assertIs(sys.modules[self.name], module.__python_module__)
@@ -289,7 +293,11 @@ class RegistryNamespaceTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_manual_self_unload_is_left_to_the_installer(self):
         module = await self.register()
-        module.client_ready = AsyncMock(side_effect=self.namespace["SelfUnload"]())
+
+        async def ready():
+            raise self.namespace["SelfUnload"]()
+
+        module.client_ready = ready
         with self.assertRaises(self.namespace["SelfUnload"]):
             await self.registry.send_ready_one(module, no_self_unload=True)
         self.assertEqual(self.registry.modules, [module])
@@ -297,7 +305,11 @@ class RegistryNamespaceTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_startup_self_unload_releases_instance_and_namespace(self):
         module = await self.register()
-        module.client_ready = AsyncMock(side_effect=self.namespace["SelfUnload"]())
+
+        async def ready():
+            raise self.namespace["SelfUnload"]()
+
+        module.client_ready = ready
         await self.registry.send_ready_one(module)
         self.assertEqual(self.registry.modules, [])
         self.assertNotIn(self.name, sys.modules)
