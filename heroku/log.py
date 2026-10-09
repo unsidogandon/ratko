@@ -204,7 +204,9 @@ class HerokuException:
             ]
         )
 
-        caller = utils.find_caller(stack or inspect.stack())
+        # find_caller captures the real stack itself (cheaply) when `stack`
+        # is empty, so no inspect.stack() is built here on every exception
+        caller = utils.find_caller(stack)
 
         return cls(
             message=override_text(exc_value)

@@ -543,6 +543,20 @@ class Database(dict):
         except KeyError:
             return default
 
+    def get_nocopy(
+        self,
+        owner: str,
+        key: str,
+        default: JSONSerializable | None = None,
+    ) -> JSONSerializable:
+        """Get database key without copying.
+
+        Read-only fast path for internal hot lookups: returns the stored
+        object as-is instead of a deepcopy, so the caller must never
+        mutate the result.
+        """
+        return self._get_raw(owner, key, default)
+
     def set(self, owner: str, key: str, value: JSONSerializable) -> bool:
         """Set database key"""
         if not utils.is_serializable(owner):

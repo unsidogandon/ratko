@@ -2,13 +2,16 @@
 
 import ast
 import asyncio
+import base64
 import collections
 import copy
 import functools
 import html
+import inspect
 import json
 import logging
 import os
+import random
 import re
 import shutil
 import sys
@@ -16,21 +19,40 @@ import tempfile
 import threading
 import time
 import unittest
+import weakref
 
 import orjson
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
+from urllib.parse import quote
 
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def _assign_target_id(item):
+    """Return the target name of a module-level (annotated) assignment"""
+    if isinstance(item, ast.Assign) and len(item.targets) == 1:
+        target = item.targets[0]
+    elif isinstance(item, ast.AnnAssign) and item.value is not None:
+        target = item.target
+    else:
+        return None
+    return target.id if isinstance(target, ast.Name) else None
+
+
 def load_definition(path, name, namespace):
     """Execute actual source definitions, replacing only external dependencies."""
     node = ast.parse((ROOT / path).read_text())
+    export_name = name.split(".")[-1]
     for part in name.split("."):
-        node = next(item for item in node.body if getattr(item, "name", None) == part)
+        node = next(
+            item
+            for item in node.body
+            if getattr(item, "name", None) == part
+            or _assign_target_id(item) == part
+        )
     for item in ast.walk(node):
         if isinstance(item, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
             item.decorator_list = [
@@ -52,7 +74,7 @@ def load_definition(path, name, namespace):
         type_ignores=[],
     )
     exec(compile(ast.fix_missing_locations(tree), str(ROOT / path), "exec"), namespace)
-    return namespace[node.name]
+    return namespace[export_name]
 
 
 def is_serializable(value):
@@ -235,6 +257,227 @@ class DatabasePersistenceTest(unittest.TestCase):
         self.db._last_saved_data = json.dumps(self.db)
         self.assertTrue(self.db.save())
         self.writer.assert_not_called()
+
+    def test_get_nocopy_returns_the_stored_object_without_copying(self):
+        value = {"list": [1, 2]}
+        self.db["TestMod"]["value"] = value
+        self.assertIs(self.db.get_nocopy("TestMod", "value"), value)
+        copied = self.db.get("TestMod", "value")
+        self.assertIsNot(copied, value)
+        self.assertEqual(copied, value)
+
+    def test_get_nocopy_returns_the_default_for_missing_keys(self):
+        self.assertIsNone(self.db.get_nocopy("TestMod", "missing"))
+        self.assertEqual(
+            self.db.get_nocopy("TestMod", "missing", "fallback"), "fallback"
+        )
+
+
+class UserPrefixesTest(unittest.TestCase):
+    def setUp(self):
+        self.namespace = {}
+        self.normalize = load_definition(
+            "heroku/utils/args.py", "normalize_prefixes", self.namespace
+        )
+        self.namespace["normalize_prefixes"] = self.normalize
+        self.user_prefixes = load_definition(
+            "heroku/utils/args.py", "user_prefixes", self.namespace
+        )
+
+    @staticmethod
+    def make_db(**values):
+        return SimpleNamespace(
+            get_nocopy=lambda owner, key, default=None: values.get(key, default)
+        )
+
+    def test_empty_db_falls_back_to_the_dot_prefix(self):
+        self.assertEqual(self.user_prefixes(self.make_db(), "heroku.main"), ["."])
+
+    def test_primary_and_alias_prefixes_are_combined_and_deduplicated(self):
+        db = self.make_db(command_prefix="!", command_prefix_aliases=[".", "!", ""])
+        self.assertEqual(self.user_prefixes(db, "heroku.main"), ["!", "."])
+
+    def test_personal_prefixes_win_for_other_users(self):
+        db = self.make_db(command_prefix=".", command_prefixes={"42": ["/", "/"]})
+        self.assertEqual(self.user_prefixes(db, "heroku.main", 42, 1), ["/"])
+        self.assertEqual(self.user_prefixes(db, "heroku.main", 1, 1), ["."])
+
+    def test_other_users_without_personal_prefixes_get_the_defaults(self):
+        db = self.make_db(command_prefix="!", command_prefixes={})
+        self.assertEqual(self.user_prefixes(db, "heroku.main", 42, 1), ["!"])
+
+
+class RedactPipelineTest(unittest.TestCase):
+    def setUp(self):
+        self.namespace = {
+            "base64": base64,
+            "html": html,
+            "quote": quote,
+            "re": re,
+        }
+        for name in (
+            "_secrets",
+            "_secrets_sorted",
+            "_secret_names",
+            "_PRIVATE_KEY_RE",
+            "_BOT_LIKE_TOKEN_RE",
+            "_API_TOKEN_RE",
+            "_AUTH_HEADER_RE",
+            "_URL_CREDENTIALS_RE",
+            "_KEY_VALUE_SECRET_RE",
+            "register_secret",
+            "redact",
+        ):
+            load_definition("heroku/_internal.py", name, self.namespace)
+
+    def test_registered_secrets_are_redacted(self):
+        register, redact = self.namespace["register_secret"], self.namespace["redact"]
+        register("short-secret")
+        register("a-much-longer-secret-value")
+        self.assertEqual(
+            redact("a-much-longer-secret-value and short-secret"),
+            "[REDACTED] and [REDACTED]",
+        )
+
+    def test_secret_registration_updates_the_sorted_cache(self):
+        self.namespace["register_secret"]("another-secret-value")
+        self.assertIn("another-secret-value", self.namespace["_secrets_sorted"])
+        self.assertEqual(
+            self.namespace["_secrets_sorted"],
+            sorted(self.namespace["_secrets"], key=len, reverse=True),
+        )
+
+    def test_pattern_based_redaction_still_works(self):
+        redact = self.namespace["redact"]
+        self.assertEqual(
+            redact("pk = 123456:ABCDEF-ghijklmnopqrstuvwxyz123456"),
+            "pk = [REDACTED]",
+        )
+        self.assertEqual(redact("key sk-abcdefghijklmnopqrst"), "key [REDACTED]")
+        self.assertEqual(
+            redact("Header: Bearer abc123xyz"), "Header: Bearer [REDACTED]"
+        )
+        self.assertEqual(
+            redact("db at postgres://user:pass@host/db"),
+            "db at postgres://[REDACTED]@host/db",
+        )
+        self.assertEqual(redact("password: hunter2"), "password: [REDACTED]")
+        self.assertIn(
+            "[REDACTED PRIVATE KEY]",
+            redact("-----BEGIN RSA PRIVATE KEY-----\nabc\n-----END RSA PRIVATE KEY-----"),
+        )
+
+
+class _CallerModuleBase:
+    """namespace stand-in for heroku.types.Module"""
+
+
+class _ProbeModule(_CallerModuleBase):
+    """First Module subclass in this test module's globals"""
+
+    def _probe_frame(self):
+        ...
+
+
+_FIND_CALLER_HOLDER: dict = {}
+
+
+def _probe_frame():
+    return _FIND_CALLER_HOLDER["find_caller"]()
+
+
+class FindCallerTest(unittest.TestCase):
+    def setUp(self):
+        self.namespace = {
+            "inspect": inspect,
+            "sys": sys,
+            "Module": _CallerModuleBase,
+        }
+        self.cache = load_definition(
+            "heroku/utils/entity.py", "_module_classes_cache", self.namespace
+        )
+        self.namespace["_MODULE_CLASSES_CACHE_LIMIT"] = load_definition(
+            "heroku/utils/entity.py", "_MODULE_CLASSES_CACHE_LIMIT", self.namespace
+        )
+        self.module_class_of_globals = load_definition(
+            "heroku/utils/entity.py", "_module_class_of_globals", self.namespace
+        )
+        self.find_caller = load_definition(
+            "heroku/utils/entity.py", "find_caller", self.namespace
+        )
+
+    @staticmethod
+    def frame(f_globals, co_name="function", f_locals=None):
+        return SimpleNamespace(
+            f_globals=f_globals,
+            f_locals=f_locals or {},
+            f_code=SimpleNamespace(co_name=co_name),
+        )
+
+    def test_module_frame_resolves_to_the_same_named_method(self):
+        class MyMod(_CallerModuleBase):
+            def probe(self):
+                ...
+
+        frame = self.frame({"MyMod": MyMod}, co_name="probe")
+        self.assertIs(self.find_caller(stack=[frame]), MyMod.probe)
+
+    def test_first_module_frame_wins_over_later_ones(self):
+        class First(_CallerModuleBase):
+            def anything(self):
+                ...
+
+        class Second(_CallerModuleBase):
+            def anything(self):
+                ...
+
+        frames = [
+            self.frame({"Second": Second}, co_name="anything"),
+            self.frame({"First": First}, co_name="anything"),
+        ]
+        self.assertIs(self.find_caller(stack=frames), Second.anything)
+
+    def test_future_dispatcher_fallback_returns_the_dispatched_func(self):
+        sentinel = object()
+        frame = self.frame(
+            {"CommandDispatcher": object},
+            co_name="future_dispatcher",
+            f_locals={"func": sentinel},
+        )
+        self.assertIs(self.find_caller(stack=[frame]), sentinel)
+
+    def test_no_matches_return_none(self):
+        self.assertIsNone(self.find_caller(stack=[self.frame({})]))
+
+    def test_truthy_non_list_stack_matches_nothing(self):
+        self.assertIsNone(self.find_caller(stack="not-a-stack"))
+
+    def test_cache_is_keyed_per_globals_dict(self):
+        class First(_CallerModuleBase):
+            def probe(self):
+                ...
+
+        class Second(_CallerModuleBase):
+            def probe(self):
+                ...
+
+        first_globals = {"First": First}
+        second_globals = {"Second": Second}
+        self.assertIs(
+            self.find_caller(stack=[self.frame(first_globals, "probe")]), First.probe
+        )
+        self.assertIs(
+            self.find_caller(stack=[self.frame(second_globals, "probe")]), Second.probe
+        )
+        self.assertIs(
+            self.find_caller(stack=[self.frame(first_globals, "probe")]), First.probe
+        )
+        self.assertIs(self.module_class_of_globals(first_globals), First)
+        self.assertIsNone(self.module_class_of_globals({}))
+
+    def test_real_stack_capture_resolves_module_functions(self):
+        _FIND_CALLER_HOLDER["find_caller"] = self.find_caller
+        self.assertIs(_probe_frame(), _ProbeModule._probe_frame)
 
 
 class ConfigAutosaverTest(unittest.IsolatedAsyncioTestCase):

@@ -89,6 +89,79 @@ ALL_TAGS = [
     "aliases",
 ]
 
+# Tag checks for _handle_tags_ext. Module-level so the mapping (37 lambdas)
+# is built once at import instead of being reconstructed on every call,
+# which happens per watcher and per command-handler candidate per message.
+# Each check receives the inspected message and the handler function.
+_TAG_CHECKS = {
+    "out": lambda m, func: getattr(m, "out", True),
+    "in": lambda m, func: not getattr(m, "out", True),
+    "only_messages": lambda m, func: isinstance(m, Message),
+    "editable": lambda m, func: (
+        not getattr(m, "out", False)
+        and not getattr(m, "fwd_from", False)
+        and not getattr(m, "sticker", False)
+        and not getattr(m, "via_bot_id", False)
+    ),
+    "no_media": lambda m, func: (
+        not isinstance(m, Message) or not getattr(m, "media", False)
+    ),
+    "only_media": lambda m, func: isinstance(m, Message)
+    and getattr(m, "media", False),
+    "only_photos": lambda m, func: utils.mime_type(m).startswith("image/"),
+    "only_videos": lambda m, func: utils.mime_type(m).startswith("video/"),
+    "only_audios": lambda m, func: utils.mime_type(m).startswith("audio/"),
+    "only_stickers": lambda m, func: getattr(m, "sticker", False),
+    "only_docs": lambda m, func: getattr(m, "document", False),
+    "only_inline": lambda m, func: getattr(m, "via_bot_id", False),
+    "only_channels": lambda m, func: (
+        getattr(m, "is_channel", False) and not getattr(m, "is_group", False)
+    ),
+    "no_channels": lambda m, func: not getattr(m, "is_channel", False),
+    "no_groups": lambda m, func: (
+        not getattr(m, "is_group", False)
+        or getattr(m, "is_private", False)
+        or getattr(m, "is_channel", False)
+    ),
+    "only_groups": lambda m, func: (
+        getattr(m, "is_group", False)
+        or not getattr(m, "is_private", False)
+        and not getattr(m, "is_channel", False)
+    ),
+    "no_pm": lambda m, func: not getattr(m, "is_private", False),
+    "only_pm": lambda m, func: getattr(m, "is_private", False),
+    "no_inline": lambda m, func: not getattr(m, "via_bot_id", False),
+    "no_stickers": lambda m, func: not getattr(m, "sticker", False),
+    "no_docs": lambda m, func: not getattr(m, "document", False),
+    "no_audios": lambda m, func: not utils.mime_type(m).startswith("audio/"),
+    "no_videos": lambda m, func: not utils.mime_type(m).startswith("video/"),
+    "no_photos": lambda m, func: not utils.mime_type(m).startswith("image/"),
+    "no_forwards": lambda m, func: not getattr(m, "fwd_from", False),
+    "no_reply": lambda m, func: not getattr(m, "reply_to_msg_id", False),
+    "only_forwards": lambda m, func: getattr(m, "fwd_from", False),
+    "only_reply": lambda m, func: getattr(m, "reply_to_msg_id", False),
+    "mention": lambda m, func: getattr(m, "mentioned", False),
+    "no_mention": lambda m, func: not getattr(m, "mentioned", False),
+    "startswith": lambda m, func: (
+        isinstance(m, Message) and m.raw_text.startswith(func.startswith)
+    ),
+    "endswith": lambda m, func: (
+        isinstance(m, Message) and m.raw_text.endswith(func.endswith)
+    ),
+    "contains": lambda m, func: isinstance(m, Message) and func.contains in m.raw_text,
+    "filter": lambda m, func: callable(func.filter) and func.filter(m),
+    "from_id": lambda m, func: getattr(m, "sender_id", None) == func.from_id,
+    "chat_id": lambda m, func: utils.get_chat_id(m)
+    == (
+        func.chat_id
+        if not str(func.chat_id).startswith("-100")
+        else int(str(func.chat_id)[4:])
+    ),
+    "regex": lambda m, func: (
+        isinstance(m, Message) and re.search(func.regex, m.raw_text)
+    ),
+}
+
 
 def _decrement_ratelimit(delay, data, key, severity):
     def inner():
@@ -388,9 +461,9 @@ class CommandDispatcher:
         ):
             return False
 
-        blacklist_chats = self._db.get(main.__name__, "blacklist_chats", [])
-        whitelist_chats = self._db.get(main.__name__, "whitelist_chats", [])
-        whitelist_modules = self._db.get(main.__name__, "whitelist_modules", [])
+        blacklist_chats = self._db.get_nocopy(main.__name__, "blacklist_chats", [])
+        whitelist_chats = self._db.get_nocopy(main.__name__, "whitelist_chats", [])
+        whitelist_modules = self._db.get_nocopy(main.__name__, "whitelist_modules", [])
 
         if (chat_id := utils.get_chat_id(message)) in blacklist_chats or (
             whitelist_chats and chat_id not in whitelist_chats
@@ -422,12 +495,12 @@ class CommandDispatcher:
             pass
         elif (
             not event.is_private
-            and not self._db.get(main.__name__, "no_nickname", False)
-            and command not in self._db.get(main.__name__, "nonickcmds", [])
-            and initiator not in self._db.get(main.__name__, "nonickusers", [])
+            and not self._db.get_nocopy(main.__name__, "no_nickname", False)
+            and command not in self._db.get_nocopy(main.__name__, "nonickcmds", [])
+            and initiator not in self._db.get_nocopy(main.__name__, "nonickusers", [])
             and not self.security.check_tsec(initiator, command)
             and utils.get_chat_id(event)
-            not in self._db.get(main.__name__, "nonickchats", [])
+            not in self._db.get_nocopy(main.__name__, "nonickchats", [])
         ):
             return False
 
@@ -497,7 +570,7 @@ class CommandDispatcher:
             return False
 
         if (
-            self._db.get(main.__name__, "grep", False)
+            self._db.get_nocopy(main.__name__, "grep", False)
             and not watcher
             and getattr(func.__self__.__class__, "__name__", "") != "TerminalMod"
         ):
@@ -665,74 +738,6 @@ class CommandDispatcher:
         """
         m = event if isinstance(event, Message) else getattr(event, "message", event)
 
-        reverse_mapping = {
-            "out": lambda: getattr(m, "out", True),
-            "in": lambda: not getattr(m, "out", True),
-            "only_messages": lambda: isinstance(m, Message),
-            "editable": (
-                lambda: not getattr(m, "out", False)
-                and not getattr(m, "fwd_from", False)
-                and not getattr(m, "sticker", False)
-                and not getattr(m, "via_bot_id", False)
-            ),
-            "no_media": lambda: (
-                not isinstance(m, Message) or not getattr(m, "media", False)
-            ),
-            "only_media": lambda: isinstance(m, Message) and getattr(m, "media", False),
-            "only_photos": lambda: utils.mime_type(m).startswith("image/"),
-            "only_videos": lambda: utils.mime_type(m).startswith("video/"),
-            "only_audios": lambda: utils.mime_type(m).startswith("audio/"),
-            "only_stickers": lambda: getattr(m, "sticker", False),
-            "only_docs": lambda: getattr(m, "document", False),
-            "only_inline": lambda: getattr(m, "via_bot_id", False),
-            "only_channels": lambda: (
-                getattr(m, "is_channel", False) and not getattr(m, "is_group", False)
-            ),
-            "no_channels": lambda: not getattr(m, "is_channel", False),
-            "no_groups": (
-                lambda: not getattr(m, "is_group", False)
-                or getattr(m, "is_private", False)
-                or getattr(m, "is_channel", False)
-            ),
-            "only_groups": (
-                lambda: getattr(m, "is_group", False)
-                or not getattr(m, "is_private", False)
-                and not getattr(m, "is_channel", False)
-            ),
-            "no_pm": lambda: not getattr(m, "is_private", False),
-            "only_pm": lambda: getattr(m, "is_private", False),
-            "no_inline": lambda: not getattr(m, "via_bot_id", False),
-            "no_stickers": lambda: not getattr(m, "sticker", False),
-            "no_docs": lambda: not getattr(m, "document", False),
-            "no_audios": lambda: not utils.mime_type(m).startswith("audio/"),
-            "no_videos": lambda: not utils.mime_type(m).startswith("video/"),
-            "no_photos": lambda: not utils.mime_type(m).startswith("image/"),
-            "no_forwards": lambda: not getattr(m, "fwd_from", False),
-            "no_reply": lambda: not getattr(m, "reply_to_msg_id", False),
-            "only_forwards": lambda: getattr(m, "fwd_from", False),
-            "only_reply": lambda: getattr(m, "reply_to_msg_id", False),
-            "mention": lambda: getattr(m, "mentioned", False),
-            "no_mention": lambda: not getattr(m, "mentioned", False),
-            "startswith": lambda: (
-                isinstance(m, Message) and m.raw_text.startswith(func.startswith)
-            ),
-            "endswith": lambda: (
-                isinstance(m, Message) and m.raw_text.endswith(func.endswith)
-            ),
-            "contains": lambda: isinstance(m, Message) and func.contains in m.raw_text,
-            "filter": lambda: callable(func.filter) and func.filter(m),
-            "from_id": lambda: getattr(m, "sender_id", None) == func.from_id,
-            "chat_id": lambda: utils.get_chat_id(m)
-            == (
-                func.chat_id
-                if not str(func.chat_id).startswith("-100")
-                else int(str(func.chat_id)[4:])
-            ),
-            "regex": lambda: (
-                isinstance(m, Message) and re.search(func.regex, m.raw_text)
-            ),
-        }
-
         return (
             "no_commands"
             if getattr(func, "no_commands", False)
@@ -746,8 +751,8 @@ class CommandDispatcher:
                         tag
                         for tag in ALL_TAGS
                         if getattr(func, tag, False)
-                        and tag in reverse_mapping
-                        and not reverse_mapping[tag]()
+                        and tag in _TAG_CHECKS
+                        and not _TAG_CHECKS[tag](m, func)
                     ),
                     None,
                 )
@@ -762,17 +767,19 @@ class CommandDispatcher:
         message = utils.censor(getattr(event, "message", event))
         message = self._patch_message_emoji_methods(message)
 
-        blacklist_chats = self._db.get(main.__name__, "blacklist_chats", [])
-        whitelist_chats = self._db.get(main.__name__, "whitelist_chats", [])
-        whitelist_modules = self._db.get(main.__name__, "whitelist_modules", [])
+        blacklist_chats = self._db.get_nocopy(main.__name__, "blacklist_chats", [])
+        whitelist_chats = self._db.get_nocopy(main.__name__, "whitelist_chats", [])
+        whitelist_modules = self._db.get_nocopy(main.__name__, "whitelist_modules", [])
 
         if (chat_id := utils.get_chat_id(message)) in blacklist_chats or (
             whitelist_chats and chat_id not in whitelist_chats
         ):
             logger.debug("Message is blocklisted")
 
+        # Read once per message instead of once per watcher
+        bl = self._db.get_nocopy(main.__name__, "disabled_watchers", {})
+
         for func in self._modules.watchers:
-            bl = self._db.get(main.__name__, "disabled_watchers", {})
             modname = str(func.__self__.__class__.strings["name"])
 
             if (

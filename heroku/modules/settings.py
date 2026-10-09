@@ -529,15 +529,6 @@ class CoreMod(loader.Module):
             except Exception:
                 pass
 
-        disabled_commands = self._db.get(main.__name__, "disabled_commands", {})
-        disabled_commands.pop(module_key, None)
-        self._db.set(main.__name__, "disabled_commands", disabled_commands)
-
-        disabled_modules = self._db.get(main.__name__, "disabled_modules", [])
-        if module_key in disabled_modules:
-            disabled_modules = [m for m in disabled_modules if m != module_key]
-            self._db.set(main.__name__, "disabled_modules", disabled_modules)
-
         await utils.answer(message, self.strings["cmc_done"].format(mod_arg))
 
     async def installationcmd(self, message: Message):

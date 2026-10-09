@@ -355,7 +355,7 @@ class SecurityManager:
             # every time he changes permissions. It doesn't
             # decrease security at all, bc user anyway can
             # access this attribute
-            config = self._db.get(__name__, "masks", {}).get(
+            config = self._db.get_nocopy(__name__, "masks", {}).get(
                 f"{func.__module__}.{func.__name__}",
                 getattr(func, "security", self._default),
             )
@@ -364,7 +364,9 @@ class SecurityManager:
             logger.error("Security config contains unknown bits")
             return False
 
-        return config & self._db.get(__name__, "bounding_mask", DEFAULT_PERMISSIONS)
+        return config & self._db.get_nocopy(
+            __name__, "bounding_mask", DEFAULT_PERMISSIONS
+        )
 
     def _check_tsec_inline(self, user_id: int, command: str) -> bool:
         """
@@ -502,7 +504,7 @@ class SecurityManager:
         if user_id in self._owner:
             return True
 
-        if user_id in self._db.get(main.__name__, "blacklist_users", []):
+        if user_id in self._db.get_nocopy(main.__name__, "blacklist_users", []):
             return False
 
         if message is None:  # In case of checking inline query security map

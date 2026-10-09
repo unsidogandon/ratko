@@ -279,32 +279,38 @@ class RegistryLifecycleTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(asyncio.CancelledError):
             await collector(self.registry)
 
-    async def test_collector_does_not_restore_disabled_or_unloading_handlers(self):
+    async def test_collector_skips_unloading_modules_and_ignores_legacy_disables(self):
         disabled = self.module("DisabledMod")
         unloading = self.module("UnloadingMod")
         unloading._unloading = True
         enabled = self.module("EnabledMod")
         self.registry.modules = [enabled, disabled, unloading]
+        # Legacy disables are inert data now: nothing reads them anymore
         self.settings["disabled_modules"] = ["DisabledMod"]
+        self.settings["disabled_commands"] = {"EnabledMod": ["test"]}
         await self.collect_once()
         self.assertEqual(
-            self.registry.commands,
+            self.registry.watchers,
+            list(enabled.heroku_watchers.values())
+            + list(disabled.heroku_watchers.values()),
+        )
+        self.assertEqual(
+            self.registry.inline_handlers,
             {
-                "test": enabled.heroku_commands["Test"],
-                "other": enabled.heroku_commands["Other"],
+                **enabled.heroku_inline_handlers,
+                **disabled.heroku_inline_handlers,
             },
         )
-        self.assertEqual(self.registry.inline_handlers, enabled.heroku_inline_handlers)
-        self.assertEqual(self.registry.callback_handlers, enabled.heroku_callback_handlers)
-        self.assertEqual(self.registry.watchers, list(enabled.heroku_watchers.values()))
+        self.assertIn("test", self.registry.commands)
+        self.assertIn("other", self.registry.commands)
 
-    async def test_collector_filters_legacy_command_disables_case_insensitively(self):
+    async def test_collector_no_longer_filters_legacy_command_disables(self):
         module = self.module("TestMod")
         self.registry.modules = [module]
         self.settings["disabled_commands"] = {"TestMod": ["TEST"]}
         await self.collect_once()
-        self.assertEqual(list(self.registry.commands), ["other"])
-        self.assertNotIn("test", self.registry._command_handlers)
+        self.assertEqual(list(self.registry.commands), ["test", "other"])
+        self.assertIn("test", self.registry._command_handlers)
 
     async def test_collector_preserves_command_conflicts_between_enabled_modules(self):
         modules = [self.module("FirstMod"), self.module("SecondMod")]
@@ -315,9 +321,16 @@ class RegistryLifecycleTest(unittest.IsolatedAsyncioTestCase):
             [module.heroku_commands["Test"] for module in modules],
         )
 
-    def test_direct_registration_respects_disabled_modules(self):
+    def test_direct_registration_ignores_legacy_disables(self):
         module = self.module("TestMod")
         self.settings["disabled_modules"] = ["TestMod"]
+        self.settings["disabled_commands"] = {"TestMod": ["test"]}
+        self.registry.register_commands(module)
+        self.assertEqual(list(self.registry.commands), ["test", "other"])
+
+    def test_direct_registration_skips_unloading_modules(self):
+        module = self.module("TestMod")
+        module._unloading = True
         for register in (
             self.registry.register_commands,
             self.registry.register_inline_stuff,
@@ -333,14 +346,14 @@ class RegistryLifecycleTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.registry.client.dispatcher.raw_handlers, [])
         self.registry.inline.register_bot_update_handler.assert_not_called()
 
-    def test_enabled_module_and_unblocked_commands_are_registered(self):
+    def test_module_commands_are_registered_regardless_of_legacy_disables(self):
         module = self.module("TestMod")
         self.settings["disabled_commands"] = {"TestMod": ["test"]}
         self.registry.register_commands(module)
         self.registry.register_watchers(module)
         self.registry.register_raw_handlers(module)
         self.registry.register_bot_update_handlers(module)
-        self.assertEqual(list(self.registry.commands), ["other"])
+        self.assertEqual(list(self.registry.commands), ["test", "other"])
         self.assertEqual(self.registry.watchers, list(module.heroku_watchers.values()))
         self.assertEqual(len(self.registry.client.dispatcher.raw_handlers), 1)
         self.registry.inline.register_bot_update_handler.assert_called_once()

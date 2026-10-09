@@ -10,6 +10,7 @@ import logging
 import random
 import re
 import string
+import sys
 import time
 import typing
 from urllib.parse import urlparse
@@ -716,52 +717,76 @@ def relocate_entities(
     return entities
 
 
+# Cache: id(globals) -> (globals, Module subclass or None). Frames of one
+# module share a single globals dict, so the scan over all its values
+# happens at most once per module (per reload). The stored dict is compared
+# by identity to stay correct across id reuse; the strong reference is
+# bounded by the cache reset below.
+_module_classes_cache: "dict[int, tuple[dict, typing.Any]]" = {}
+
+_MODULE_CLASSES_CACHE_LIMIT = 1024
+
+
+def _module_class_of_globals(f_globals):
+    """Find the Module subclass in the given module globals (cached)"""
+    cached = _module_classes_cache.get(id(f_globals))
+    if cached is not None and cached[0] is f_globals:
+        return cached[1]
+
+    result = next(
+        (
+            cls_
+            for cls_ in f_globals.values()
+            if inspect.isclass(cls_)
+            and issubclass(cls_, Module)
+            and cls_ is not Module
+        ),
+        None,
+    )
+    if len(_module_classes_cache) >= _MODULE_CLASSES_CACHE_LIMIT:
+        _module_classes_cache.clear()
+    _module_classes_cache[id(f_globals)] = (f_globals, result)
+    return result
+
+
 def find_caller(
-    stack: list[inspect.FrameInfo] | None = None,
+    stack: list | None = None,
 ) -> typing.Any:
     """
     Attempts to find command in stack
-    :param stack: Stack to search in
+    :param stack: Stack to search in (raw frames, FrameInfo objects or None)
     :return: Command-caller or None
     """
-    caller = next(
-        (
-            frame_info
-            for frame_info in stack or inspect.stack()
-            if hasattr(frame_info, "function")
-            and any(
-                inspect.isclass(cls_)
-                and issubclass(cls_, Module)
-                and cls_ is not Module
-                for cls_ in frame_info.frame.f_globals.values()
-            )
-        ),
-        None,
-    )
+    # Historical contract: a falsy `stack` captures the real stack, while a
+    # truthy non-list `stack` (e.g. a string) matches nothing
+    if not stack:
+        frames = []
+        frame = sys._getframe(1)
+        while frame is not None:
+            frames.append(frame)
+            frame = frame.f_back
+    elif isinstance(stack, (list, tuple)):
+        frames = []
+        for item in stack:
+            frame = getattr(item, "frame", item)
+            if hasattr(frame, "f_globals") and hasattr(frame, "f_code"):
+                frames.append(frame)
+    else:
+        return None
 
-    if not caller:
-        return next(
-            (
-                frame_info.frame.f_locals["func"]
-                for frame_info in stack or inspect.stack()
-                if hasattr(frame_info, "function")
-                and frame_info.function == "future_dispatcher"
-                and (
-                    "CommandDispatcher"
-                    in getattr(getattr(frame_info, "frame", None), "f_globals", {})
-                )
-            ),
-            None,
-        )
+    for frame in frames:
+        cls_ = _module_class_of_globals(frame.f_globals)
+        if cls_ is not None:
+            return getattr(cls_, frame.f_code.co_name, None)
 
-    return next(
-        (
-            getattr(cls_, caller.function, None)
-            for cls_ in caller.frame.f_globals.values()
-            if inspect.isclass(cls_) and issubclass(cls_, Module)
-        ),
-        None,
-    )
+    for frame in frames:
+        if (
+            frame.f_code.co_name == "future_dispatcher"
+            and "CommandDispatcher" in frame.f_globals
+        ):
+            return frame.f_locals.get("func")
+
+    return None
 
 
 async def dnd(

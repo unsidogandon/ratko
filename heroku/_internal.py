@@ -43,11 +43,28 @@ def run_exit_flushers() -> None:
 
 
 _secrets = set()
+_secrets_sorted: list[str] = []
 _secret_names = re.compile(
     r"(?:token|password|passwd|secret|api_?hash|api_?key|auth_?key|"
     r"string_?session|session_?string|private_?key|basic_auth|redis_uri|"
     r"redis_url|database_url|db_uri|credentials)",
     re.I,
+)
+
+# Precompiled redaction patterns: compiling them once instead of on every
+# redact() call (which runs for every log record) dominated the log pipeline
+_PRIVATE_KEY_RE = re.compile(
+    r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
+    re.S,
+)
+_BOT_LIKE_TOKEN_RE = re.compile(r"\b\d{5,16}:[A-Za-z0-9_-]{30,}\b")
+_API_TOKEN_RE = re.compile(r"\b(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]{16,}\b")
+_AUTH_HEADER_RE = re.compile(r"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9+/_.=-]+")
+_URL_CREDENTIALS_RE = re.compile(r"(\w+://)[^\s/@]+:[^\s/@]+@")
+_KEY_VALUE_SECRET_RE = re.compile(
+    r"(?i)([\"']?(?:[\w.-]*(?:token|password|passwd|secret|api_key|api_hash|"
+    r"auth_key|session_string|basic_auth))[\"']?\s*[:=]\s*)"
+    r"(?:\"[^\"]*\"|'[^']*'|[^\s&,;<>]+)"
 )
 
 
@@ -75,6 +92,10 @@ def register_secret(value):
         _secrets.update((value, html.escape(value), quote(value, safe="")))
         if ":" in value:
             _secrets.add(base64.b64encode(value.encode()).decode())
+        # redact() matches secrets longest-first; the sorted order is
+        # maintained here so the hot path does not re-sort on every record
+        global _secrets_sorted
+        _secrets_sorted = sorted(_secrets, key=len, reverse=True)
 
 
 def register_secrets(data):
@@ -99,25 +120,14 @@ def register_secret_if_named(key, value):
 def redact(text):
     """Replace all registered and pattern-matched secrets with [REDACTED]"""
     text = str(text)
-    for secret in sorted(_secrets.copy(), key=len, reverse=True):
+    for secret in _secrets_sorted:
         text = text.replace(secret, "[REDACTED]")
-    text = re.sub(
-        r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
-        "[REDACTED PRIVATE KEY]",
-        text,
-        flags=re.S,
-    )
-    text = re.sub(r"\b\d{5,16}:[A-Za-z0-9_-]{30,}\b", "[REDACTED]", text)
-    text = re.sub(r"\b(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]{16,}\b", "[REDACTED]", text)
-    text = re.sub(r"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9+/_.=-]+", r"\1 [REDACTED]", text)
-    text = re.sub(r"(\w+://)[^\s/@]+:[^\s/@]+@", r"\1[REDACTED]@", text)
-    text = re.sub(
-        r"(?i)([\"']?(?:[\w.-]*(?:token|password|passwd|secret|api_key|api_hash|"
-        r"auth_key|session_string|basic_auth))[\"']?\s*[:=]\s*)"
-        r"(?:\"[^\"]*\"|'[^']*'|[^\s&,;<>]+)",
-        r"\1[REDACTED]",
-        text,
-    )
+    text = _PRIVATE_KEY_RE.sub("[REDACTED PRIVATE KEY]", text)
+    text = _BOT_LIKE_TOKEN_RE.sub("[REDACTED]", text)
+    text = _API_TOKEN_RE.sub("[REDACTED]", text)
+    text = _AUTH_HEADER_RE.sub(r"\1 [REDACTED]", text)
+    text = _URL_CREDENTIALS_RE.sub(r"\1[REDACTED]@", text)
+    text = _KEY_VALUE_SECRET_RE.sub(r"\1[REDACTED]", text)
     return text
 
 

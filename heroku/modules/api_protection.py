@@ -11,6 +11,8 @@
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
 import asyncio
+import collections
+import functools
 import io
 import json
 import logging
@@ -18,6 +20,7 @@ import random
 import re
 import sys
 import time
+import typing
 
 from herokutl.tl import functions
 from herokutl.tl.tlobject import TLRequest
@@ -118,8 +121,9 @@ class APIRatelimiterMod(loader.Module):
     strings = {"name": "APILimiter"}
 
     def __init__(self):
-        self._ratelimiter: list[tuple] = []
+        self._ratelimiter: collections.deque = collections.deque()
         self._suspend_until = 0
+        self._gate_until: float = 0
         self._lock = False
         self.config = loader.ModuleConfig(
             loader.ConfigValue(
@@ -175,72 +179,92 @@ class APIRatelimiterMod(loader.Module):
 
         old_call = self._client._call
 
-        async def new_call(
-            sender: "MTProtoSender",  # type: ignore  # noqa: F821
-            request: TLRequest,
-            ordered: bool = False,
-            flood_sleep_threshold: int = None,
-        ):
-            req = (request,) if not is_list_like(request) else request
-            for r in req:
-                if (
-                    time.perf_counter() > self._suspend_until
-                    and not self.get(
-                        "disable_protection",
-                        True,
-                    )
-                    and (
-                        r.__module__.rsplit(".", maxsplit=1)[1]
-                        in {"messages", "account", "channels"}
-                    )
-                ):
-                    await asyncio.sleep(random.randint(1, 5) / 100)
-                    request_name = type(r).__name__
-                    self._ratelimiter += [
-                        (request_name, time.perf_counter(), find_call_chain())
-                    ]
-
-                    self._ratelimiter = list(
-                        filter(
-                            lambda x: time.perf_counter() - x[1]
-                            < int(self.config["time_sample"]),
-                            self._ratelimiter,
-                        )
-                    )
-
-                    if (
-                        len(self._ratelimiter) > int(self.config["threshold"])
-                        and not self._lock
-                    ):
-                        self._lock = True
-                        report_bytes = json.dumps(
-                            self._ratelimiter,
-                            indent=4,
-                        ).encode()
-                        report = io.BytesIO(report_bytes)
-                        report.name = "local_fw_report.json"
-
-                        await self.inline.bot.send_document(
-                            self.tg_id,
-                            report,
-                            caption=self.inline.sanitise_text(
-                                self.strings["warning"].format(
-                                    self.config["local_floodwait"],
-                                    prefix=utils.escape_html(self.get_prefix()),
-                                )
-                            ),
-                        )
-
-                        # It is intented to use time.sleep instead of asyncio.sleep
-                        time.sleep(int(self.config["local_floodwait"]))
-                        self._lock = False
-
-            return await old_call(sender, request, ordered, flood_sleep_threshold)
-
-        self._client._call = new_call
+        self._client._call = functools.partial(self._protected_call, old_call)
         self._client._old_call_rewritten = old_call
         self._client._call._heroku_overwritten = True
         logger.debug("Successfully installed ratelimiter")
+
+    async def _protected_call(
+        self,
+        old_call: typing.Callable,
+        sender: "MTProtoSender",  # type: ignore  # noqa: F821
+        request: TLRequest,
+        ordered: bool = False,
+        flood_sleep_threshold: int = None,
+    ):
+        req = (request,) if not is_list_like(request) else request
+
+        # Requests arriving during an active local floodwait wait for the
+        # gate to open. Previously this blocked the whole event loop with
+        # time.sleep(), freezing timers, watchers and every client for up
+        # to local_floodwait seconds.
+        gate_wait = self._gate_until - time.perf_counter()
+        if gate_wait > 0:
+            await asyncio.sleep(gate_wait)
+
+        for r in req:
+            if (
+                time.perf_counter() > self._suspend_until
+                and not self._db.get_nocopy(
+                    self.__class__.__name__,
+                    "disable_protection",
+                    True,
+                )
+                and (
+                    r.__module__.rsplit(".", maxsplit=1)[1]
+                    in {"messages", "account", "channels"}
+                )
+            ):
+                await asyncio.sleep(random.randint(1, 5) / 100)
+                request_name = type(r).__name__
+                self._ratelimiter.append(
+                    (request_name, time.perf_counter(), find_call_chain())
+                )
+
+                # Drop expired samples from the left instead of rebuilding
+                # the whole list (and re-checking every entry) per request
+                window = int(self.config["time_sample"])
+                while (
+                    self._ratelimiter
+                    and time.perf_counter() - self._ratelimiter[0][1] >= window
+                ):
+                    self._ratelimiter.popleft()
+
+                if (
+                    len(self._ratelimiter) > int(self.config["threshold"])
+                    and not self._lock
+                ):
+                    self._lock = True
+                    report_bytes = json.dumps(
+                        list(self._ratelimiter),
+                        indent=4,
+                    ).encode()
+                    report = io.BytesIO(report_bytes)
+                    report.name = "local_fw_report.json"
+
+                    await self.inline.bot.send_document(
+                        self.tg_id,
+                        report,
+                        caption=self.inline.sanitise_text(
+                            self.strings["warning"].format(
+                                self.config["local_floodwait"],
+                                prefix=utils.escape_html(self.get_prefix()),
+                            )
+                        ),
+                    )
+
+                    # Hold back protected requests until the deadline
+                    # instead of blocking the event loop
+                    self._gate_until = (
+                        time.perf_counter()
+                        + int(self.config["local_floodwait"])
+                    )
+                    await asyncio.sleep(
+                        self._gate_until - time.perf_counter()
+                    )
+                    self._lock = False
+
+        return await old_call(sender, request, ordered, flood_sleep_threshold)
 
     async def on_unload(self):
         if hasattr(self._client, "_old_call_rewritten"):

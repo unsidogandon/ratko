@@ -2,6 +2,7 @@
 
 import ast
 import asyncio
+import collections
 import codecs
 import contextlib
 import copy
@@ -12,8 +13,12 @@ import importlib.abc
 import importlib.machinery
 import importlib.util
 import inspect
+import io
 import itertools
+import json
+import logging
 import os
+import random
 import re
 import shlex
 import signal
@@ -686,6 +691,233 @@ class InlineConstructorTest(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(callback["unit_id"], result.unit_id)
                 await self.manager._unload_unit(result.unit_id)
                 self.assertEqual(self.manager._custom_map, {})
+
+
+class TagsExtTest(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.Message = type("Message", (), {})
+        self.namespace = {
+            "re": re,
+            "utils": SimpleNamespace(
+                mime_type=lambda m: getattr(m, "_mime", "text/plain"),
+                get_chat_id=lambda m: getattr(m, "chat_id", 0),
+            ),
+            "Message": self.Message,
+        }
+        self.tag_checks = load_definition(
+            "heroku/dispatcher.py", "_TAG_CHECKS", self.namespace
+        )
+        self.namespace["_TAG_CHECKS"] = self.tag_checks
+        self.namespace["ALL_TAGS"] = load_definition(
+            "heroku/dispatcher.py", "ALL_TAGS", self.namespace
+        )
+        dispatcher_type = type("CommandDispatcher", (), {})
+        dispatcher_type._handle_tags_ext = load_definition(
+            "heroku/dispatcher.py",
+            "CommandDispatcher._handle_tags_ext",
+            self.namespace,
+        )
+        self.dispatcher = dispatcher_type()
+        self.dispatcher._handle_command = AsyncMock()
+
+    def message(self, **attrs):
+        message = self.Message()
+        message.raw_text = "hello world"
+        for key, value in attrs.items():
+            setattr(message, key, value)
+        return message
+
+    async def test_untagged_handlers_pass_without_command_pipeline(self):
+        event = self.message(out=True)
+        self.assertIsNone(
+            await self.dispatcher._handle_tags_ext(event, SimpleNamespace())
+        )
+        self.dispatcher._handle_command.assert_not_awaited()
+
+    async def test_out_tag_matches_only_outgoing_messages(self):
+        handler = SimpleNamespace(out=True)
+        outgoing = self.message(out=True)
+        incoming = self.message(out=False)
+        self.assertIsNone(await self.dispatcher._handle_tags_ext(outgoing, handler))
+        self.assertEqual(
+            await self.dispatcher._handle_tags_ext(incoming, handler), "out"
+        )
+
+    async def test_content_tags_use_the_module_level_checks(self):
+        handler = SimpleNamespace(contains="world")
+        matching = self.message(out=True)
+        mismatching = self.message(out=True)
+        mismatching.raw_text = "nope"
+        self.assertIsNone(await self.dispatcher._handle_tags_ext(matching, handler))
+        self.assertEqual(
+            await self.dispatcher._handle_tags_ext(mismatching, handler), "contains"
+        )
+
+    async def test_mime_type_tags_are_evaluated(self):
+        handler = SimpleNamespace(only_photos=True)
+        photo = self.message(out=True)
+        photo._mime = "image/jpeg"
+        document = self.message(out=True)
+        document._mime = "application/pdf"
+        self.assertIsNone(await self.dispatcher._handle_tags_ext(photo, handler))
+        self.assertEqual(
+            await self.dispatcher._handle_tags_ext(document, handler), "only_photos"
+        )
+
+    async def test_no_commands_and_only_commands_delegate_to_the_pipeline(self):
+        event = self.message(out=True)
+        self.dispatcher._handle_command = AsyncMock(return_value=True)
+        self.assertEqual(
+            await self.dispatcher._handle_tags_ext(
+                event, SimpleNamespace(no_commands=True)
+            ),
+            "no_commands",
+        )
+        self.dispatcher._handle_command.assert_awaited_once_with(event, watcher=True)
+
+        self.dispatcher._handle_command = AsyncMock(return_value=False)
+        self.assertEqual(
+            await self.dispatcher._handle_tags_ext(
+                event, SimpleNamespace(only_commands=True)
+            ),
+            "only_commands",
+        )
+        self.dispatcher._handle_command.assert_awaited_once_with(event, watcher=True)
+
+
+class ApiProtectionTest(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.poison = Mock(
+            side_effect=AssertionError("time.sleep must never block the event loop")
+        )
+        self.namespace = {
+            "asyncio": asyncio,
+            "collections": collections,
+            "functools": functools,
+            "io": io,
+            "json": json,
+            "logging": logging,
+            "random": random,
+            "re": re,
+            "sys": sys,
+            "time": SimpleNamespace(
+                perf_counter=time.perf_counter, sleep=self.poison
+            ),
+            "typing": typing,
+            "is_list_like": lambda value: isinstance(value, (list, tuple)),
+            "find_call_chain": lambda: "test-chain",
+            "logger": Mock(),
+            "utils": SimpleNamespace(escape_html=html.escape),
+            "TLRequest": object,
+            "loader": SimpleNamespace(
+                SelfUnload=type("SelfUnload", (Exception,), {})
+            ),
+        }
+        self.module_type = type("APIRatelimiterMod", (), {})
+        self.module_type._protected_call = load_definition(
+            "heroku/modules/api_protection.py",
+            "APIRatelimiterMod._protected_call",
+            self.namespace,
+        )
+        self.mod = self.module_type()
+        self.mod._ratelimiter = collections.deque()
+        self.mod._suspend_until = 0
+        self.mod._gate_until = 0
+        self.mod._lock = False
+        self.mod.config = {"time_sample": 15, "threshold": 100, "local_floodwait": 30}
+        self.mod._db = SimpleNamespace(
+            get_nocopy=lambda owner, key, default=None: False
+        )
+        self.mod.inline = SimpleNamespace(
+            bot=SimpleNamespace(send_document=AsyncMock()),
+            sanitise_text=lambda text: text,
+        )
+        self.mod.tg_id = 1
+        self.mod.strings = {"warning": "Warning: {} prefix={prefix}"}
+        self.mod.get_prefix = lambda: "."
+        self.old_call = AsyncMock(return_value="response")
+
+    @staticmethod
+    def request():
+        return type(
+            "SendMessageRequest",
+            (),
+            {"__module__": "herokutl.tl.functions.messages"},
+        )()
+
+    async def call(self, request=None):
+        return await self.mod._protected_call(
+            self.old_call,
+            object(),
+            request or self.request(),
+        )
+
+    async def test_requests_are_tracked_without_blocking_sleep(self):
+        self.assertEqual(await self.call(), "response")
+        self.old_call.assert_awaited_once()
+        self.assertEqual(len(self.mod._ratelimiter), 1)
+        self.assertEqual(self.mod._ratelimiter[0][0], "SendMessageRequest")
+        self.poison.assert_not_called()
+
+    async def test_expired_samples_are_pruned_from_the_left(self):
+        self.mod._ratelimiter.append(
+            ("OldRequest", time.perf_counter() - 100, "old")
+        )
+        await self.call()
+        self.assertEqual(len(self.mod._ratelimiter), 1)
+        self.assertEqual(self.mod._ratelimiter[0][0], "SendMessageRequest")
+
+    async def test_disabled_protection_skips_tracking(self):
+        self.mod._db = SimpleNamespace(
+            get_nocopy=lambda owner, key, default=None: True
+        )
+        await self.call()
+        self.assertEqual(len(self.mod._ratelimiter), 0)
+        self.old_call.assert_awaited_once()
+
+    async def test_gate_waits_for_the_deadline_without_freezing_the_loop(self):
+        self.mod._gate_until = time.perf_counter() + 0.05
+        loop = asyncio.get_event_loop()
+        started = loop.time()
+        await self.call()
+        self.assertGreaterEqual(loop.time() - started, 0.05)
+        self.old_call.assert_awaited_once()
+
+    async def test_threshold_triggers_the_report_and_the_local_gate(self):
+        self.mod.config = {"time_sample": 15, "threshold": 0, "local_floodwait": 0}
+        await self.call()
+        self.mod.inline.bot.send_document.assert_awaited_once()
+        self.assertFalse(self.mod._lock)
+        self.old_call.assert_awaited_once()
+        self.poison.assert_not_called()
+
+    async def test_install_wraps_the_call_with_a_partial(self):
+        namespace = dict(
+            self.namespace, asyncio=SimpleNamespace(sleep=AsyncMock())
+        )
+        module_type = type("APIRatelimiterModInstall", (), {})
+        module_type._install_protection = load_definition(
+            "heroku/modules/api_protection.py",
+            "APIRatelimiterMod._install_protection",
+            namespace,
+        )
+        mod = module_type()
+        mod._protected_call = Mock()
+
+        # A plain function: Mock auto-creates the _heroku_overwritten
+        # attribute and would falsely trigger the "already installed" guard
+        async def plain_old_call(sender, request, ordered=False, **kwargs):
+            return "response"
+
+        client = SimpleNamespace(_call=plain_old_call)
+        mod._client = client
+        await mod._install_protection()
+        wrapper = client._call
+        self.assertIsInstance(wrapper, functools.partial)
+        self.assertIs(wrapper.func, mod._protected_call)
+        self.assertEqual(wrapper.args, (plain_old_call,))
+        self.assertTrue(wrapper._heroku_overwritten)
+        self.assertIs(client._old_call_rewritten, plain_old_call)
 
 
 class TopicGuesserTest(unittest.IsolatedAsyncioTestCase):

@@ -610,18 +610,10 @@ class Modules:
             inline_handlers = {}
             callback_handlers = {}
             watchers = []
-            disabled = set(self._db.get(main.__name__, "disabled_modules", []))
-            disabled_commands = self._db.get(main.__name__, "disabled_commands", {})
             for module in self.modules:
-                module_name = module.__class__.__name__
-                if module_name in disabled or getattr(module, "_unloading", False):
+                if getattr(module, "_unloading", False):
                     continue
-                blocked = {
-                    name.lower() for name in disabled_commands.get(module_name, [])
-                }
                 for name, handler in module.heroku_commands.items():
-                    if name.lower() in blocked:
-                        continue
                     commands[name.lower()] = handler
                     command_handlers.setdefault(name.lower(), []).append(handler)
                 inline_handlers.update(module.heroku_inline_handlers)
@@ -859,11 +851,8 @@ class Modules:
             self.add_alias(alias, *cmd.split(maxsplit=1))
 
     def _is_module_disabled(self, instance: Module) -> bool:
-        """Respect persisted legacy disables without changing account data."""
-        return getattr(instance, "_unloading", False) or (
-            instance.__class__.__name__
-            in self._db.get(main.__name__, "disabled_modules", [])
-        )
+        """Check whether the module instance should not be registered"""
+        return getattr(instance, "_unloading", False)
 
     def register_raw_handlers(self, instance: Module):
         """Register event handlers for a module"""
@@ -934,15 +923,8 @@ class Modules:
 
         if self._is_module_disabled(instance):
             return
-        blocked = {
-            name.lower()
-            for name in self._db.get(main.__name__, "disabled_commands", {}).get(
-                instance.__class__.__name__, []
-            )
-        }
+
         for _command, cmd in instance.heroku_commands.items():
-            if _command.lower() in blocked:
-                continue
             # Restrict overwriting core modules' commands
             if (
                 not self._remove_core_protection
@@ -1188,18 +1170,8 @@ class Modules:
             name = text.split()[0].lower()
             if name not in self.commands:
                 continue
-            disabled = self._db.get(main.__name__, "disabled_modules", [])
-            disabled_commands = self._db.get(main.__name__, "disabled_commands", {})
             handlers = self._command_handlers.get(name, [self.commands[name]])
-            available = []
-            for handler in handlers:
-                module_name = handler.__self__.__class__.__name__
-                if module_name in disabled or name in {
-                    item.lower() for item in disabled_commands.get(module_name, [])
-                }:
-                    continue
-                available.append(handler)
-            return text, available
+            return text, handlers
         return _command, []
 
     def send_config(self, skip_hook: bool = False):

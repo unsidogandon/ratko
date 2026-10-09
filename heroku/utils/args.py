@@ -181,14 +181,15 @@ def normalize_prefixes(value):
 
 def user_prefixes(db, namespace, user_id=None, self_id=None):
     """Get the list of prefixes available for the user"""
-    primary = db.get(namespace, "command_prefix", ".")
+    # Read-only lookups on the hot per-message path: no copies
+    primary = db.get_nocopy(namespace, "command_prefix", ".")
     defaults = normalize_prefixes(primary) + normalize_prefixes(
-        db.get(namespace, "command_prefix_aliases", [])
+        db.get_nocopy(namespace, "command_prefix_aliases", [])
     )
     defaults = normalize_prefixes(defaults) or ["."]
     if user_id is None or user_id == self_id:
         return defaults
-    personal = db.get(namespace, "command_prefixes", {}).get(str(user_id))
+    personal = db.get_nocopy(namespace, "command_prefixes", {}).get(str(user_id))
     return normalize_prefixes(personal) or defaults
 
 
