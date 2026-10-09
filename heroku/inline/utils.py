@@ -262,7 +262,15 @@ class Utils(InlineUnit):
     def _reverse_method_lookup(
         self: "InlineManager", needle: Callable, /
     ) -> str | None:
-        return next(
+        # Cached by function identity: the lookup runs per callback-handler
+        # per button press and used to linearly scan every inline/callback
+        # handler each time. The cache is invalidated by
+        # _reset_reverse_lookup_cache() whenever the handler tables change
+        cached = self._rev_lookup_cache.get(id(needle))
+        if cached is not None and cached[0] is needle:
+            return cached[1]
+
+        name = next(
             (
                 name
                 for name, method in itertools.chain(
@@ -273,6 +281,14 @@ class Utils(InlineUnit):
             ),
             None,
         )
+        if len(self._rev_lookup_cache) > 512:
+            self._rev_lookup_cache.clear()
+        self._rev_lookup_cache[id(needle)] = (needle, name)
+        return name
+
+    def _reset_reverse_lookup_cache(self: "InlineManager") -> None:
+        """Drop the reverse-lookup cache (handler tables were rebuilt)"""
+        self._rev_lookup_cache = {}
 
     async def check_inline_security(
         self: "InlineManager", *, func: typing.Callable, user: int

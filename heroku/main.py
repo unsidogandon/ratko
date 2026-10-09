@@ -27,7 +27,6 @@ import sqlite3
 import string
 import sys
 import tempfile
-import traceback
 import typing
 from getpass import getpass
 from pathlib import Path
@@ -693,10 +692,13 @@ def _task_factory(loop, coro, **kwargs):
             task._ratko_name = f"ratko:{_code_name(code)}"
             task.set_name(task._ratko_name)
 
-        origin = traceback.extract_stack(limit=5)
+        # Single caller frame instead of traceback.extract_stack, which
+        # walked the whole stack (with FrameSummary construction) for
+        # every created task while feeding only the exception log
+        origin = sys._getframe(2)
         task._ratko_created_at = [
-            f"{frame.filename}:{frame.lineno} in {frame.name}"
-            for frame in origin[-3:-1]
+            f"{origin.f_code.co_filename}:{origin.f_lineno}"
+            f" in {origin.f_code.co_name}"
         ]
     except Exception:
         pass

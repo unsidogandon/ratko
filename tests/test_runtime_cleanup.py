@@ -14,7 +14,7 @@ import shutil
 import threading
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from urllib.parse import urlsplit
 
@@ -223,11 +223,14 @@ class RegistryLifecycleTest(unittest.IsolatedAsyncioTestCase):
         registry_type = type("Registry", (), {})
         for name in (
             "_is_module_disabled",
+            "_rebuild_alias_index",
+            "find_alias",
             "register_commands",
             "register_inline_stuff",
             "register_watchers",
             "register_raw_handlers",
             "register_bot_update_handlers",
+            "unregister_commands",
         ):
             setattr(
                 registry_type,
@@ -241,7 +244,10 @@ class RegistryLifecycleTest(unittest.IsolatedAsyncioTestCase):
         self.registry.client = SimpleNamespace(
             tg_id=1, dispatcher=SimpleNamespace(raw_handlers=[])
         )
-        self.registry.inline = SimpleNamespace(register_bot_update_handler=Mock())
+        self.registry.inline = SimpleNamespace(
+            register_bot_update_handler=Mock(),
+            _reset_reverse_lookup_cache=Mock(),
+        )
         self.registry.modules = []
         self.registry.commands = {}
         self.registry._command_handlers = {}
@@ -250,13 +256,23 @@ class RegistryLifecycleTest(unittest.IsolatedAsyncioTestCase):
         self.registry.watchers = []
         self.registry.aliases = {}
         self.registry._core_commands = []
+        self.registry._alias_index = {}
+        self.registry._tables_dirty = False
         self.registry._remove_core_protection = False
 
     def module(self, name):
         module = type(name, (), {})()
         module.__origin__ = "<file>"
+
+        # Plain attrs are pinned: Mock would auto-create .aliases/.alias
+        # and break the alias index rebuild
         handler = Mock()
-        module.heroku_commands = {"Test": handler, "Other": Mock()}
+        handler.aliases = []
+        handler.alias = None
+        other = Mock()
+        other.aliases = []
+        other.alias = None
+        module.heroku_commands = {"Test": handler, "Other": other}
         module.heroku_inline_handlers = {"inline": handler}
         module.heroku_callback_handlers = {"callback": handler}
         module.heroku_watchers = {"watcher": handler}
@@ -271,7 +287,33 @@ class RegistryLifecycleTest(unittest.IsolatedAsyncioTestCase):
         ]
         return module
 
-    async def collect_once(self):
+    def bound_module(self, name):
+        """Module whose command handlers are real bound methods"""
+        module = type(name, (), {})()
+        module.__origin__ = "<file>"
+
+        async def test_cmd(self, message):
+            ...
+
+        async def other_cmd(self, message):
+            ...
+
+        test_cmd.aliases = []
+        test_cmd.alias = "шакал"
+        other_cmd.aliases = []
+        other_cmd.alias = None
+        module.heroku_commands = {
+            "Test": MethodType(test_cmd, module),
+            "Other": MethodType(other_cmd, module),
+        }
+        module.heroku_inline_handlers = {}
+        module.heroku_callback_handlers = {}
+        module.heroku_watchers = {"watcher": Mock()}
+        module.attributes = []
+        return module
+
+    async def collect_once(self, dirty=True):
+        self.registry._tables_dirty = dirty
         self.namespace["asyncio"] = SimpleNamespace(
             sleep=AsyncMock(side_effect=[None, asyncio.CancelledError()])
         )
@@ -357,6 +399,60 @@ class RegistryLifecycleTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.registry.watchers, list(module.heroku_watchers.values()))
         self.assertEqual(len(self.registry.client.dispatcher.raw_handlers), 1)
         self.registry.inline.register_bot_update_handler.assert_called_once()
+
+    async def test_collector_skips_the_rebuild_when_tables_are_clean(self):
+        module = self.module("TestMod")
+        self.registry.modules = [module]
+        await self.collect_once(dirty=False)
+        self.assertEqual(self.registry.commands, {})
+        self.assertEqual(self.registry.watchers, [])
+
+    async def test_collector_rebuilds_when_tables_are_dirty(self):
+        module = self.module("TestMod")
+        self.registry.modules = [module]
+        await self.collect_once(dirty=True)
+        self.assertEqual(list(self.registry.commands), ["test", "other"])
+        self.registry.inline._reset_reverse_lookup_cache.assert_called_once()
+
+    def test_find_alias_resolves_registered_aliases_case_insensitively(self):
+        module = self.module("TestMod")
+        module.heroku_commands["Test"].alias = "Шакал"
+        self.registry.register_commands(module)
+        self.assertEqual(self.registry.find_alias("шакал"), "test")
+        self.assertEqual(self.registry.find_alias("ШАКАЛ"), "test")
+
+    def test_find_alias_prefers_the_first_registered_command(self):
+        first = self.module("FirstMod")
+        first.heroku_commands = {"Test": first.heroku_commands["Test"]}
+        first.heroku_commands["Test"].aliases = ["dup"]
+        second = self.module("SecondMod")
+        second.heroku_commands = {"Other": second.heroku_commands["Other"]}
+        second.heroku_commands["Other"].aliases = ["dup"]
+        self.registry.register_commands(first)
+        self.registry.register_commands(second)
+        self.assertEqual(self.registry.find_alias("dup"), "test")
+
+    def test_find_alias_skips_core_command_names(self):
+        module = self.module("TestMod")
+        module.heroku_commands["Test"].alias = "help"
+        self.registry.register_commands(module)
+        self.registry._core_commands = ["help"]
+        self.assertIsNone(self.registry.find_alias("help"))
+
+    def test_find_alias_supports_the_legacy_branch(self):
+        self.registry.aliases = {"legacy": "cmd arg"}
+        self.assertEqual(
+            self.registry.find_alias("legacy", include_legacy=True), "cmd arg"
+        )
+        self.assertIsNone(self.registry.find_alias("legacy"))
+
+    def test_unregister_rebuilds_the_alias_index(self):
+        module = self.bound_module("TestMod")
+        self.registry.register_commands(module)
+        self.assertEqual(self.registry.find_alias("шакал"), "test")
+        self.registry.unregister_commands(module, "unload")
+        self.assertIsNone(self.registry.find_alias("шакал"))
+        self.assertNotIn("test", self.registry.commands)
 
 
 class LogBatchTest(unittest.IsolatedAsyncioTestCase):

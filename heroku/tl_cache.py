@@ -136,6 +136,31 @@ def hashable(value: typing.Any) -> bool:
     return True
 
 
+# Cap for the heroku caches (in keys). Records are aliased under up to
+# 4 keys inserted together, so they age out together on eviction
+_HEROKU_CACHE_LIMIT = 4096
+
+
+def _put_bounded(cache: dict, key, record) -> None:
+    """Insert into a heroku cache, evicting the oldest keys over the cap"""
+    if len(cache) >= _HEROKU_CACHE_LIMIT:
+        for stale in list(cache)[: _HEROKU_CACHE_LIMIT // 2]:
+            del cache[stale]
+    cache[key] = record
+
+
+def _clone_cached(value):
+    """Shallow clone of a cached TL/custom object for a single reader.
+
+    Follows the dispatcher clone pattern (same class, copied instance
+    dict) and is much cheaper than copy.deepcopy. Nested fields stay
+    shared with the cache, so callers must not mutate them.
+    """
+    clone = value.__class__.__new__(value.__class__)
+    clone.__dict__.update(value.__dict__)
+    return clone
+
+
 class CustomTelegramClient(TelegramClient):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -708,28 +733,36 @@ class CustomTelegramClient(TelegramClient):
                 entity,
                 type(self._heroku_entity_cache[hashable_entity].entity).__name__,
             )
-            return copy.deepcopy(self._heroku_entity_cache[hashable_entity].entity)
+            return _clone_cached(self._heroku_entity_cache[hashable_entity].entity)
 
         resolved_entity = await super().get_entity(entity)
 
         if resolved_entity:
             cache_record = CacheRecordEntity(hashable_entity, resolved_entity, exp)
-            self._heroku_entity_cache[hashable_entity] = cache_record
+            _put_bounded(self._heroku_entity_cache, hashable_entity, cache_record)
             logger.debug("Saved hashable_entity %s to cache", hashable_entity)
 
             if getattr(resolved_entity, "id", None):
                 logger.debug("Saved resolved_entity id %s to cache", resolved_entity.id)
-                self._heroku_entity_cache[resolved_entity.id] = cache_record
+                _put_bounded(self._heroku_entity_cache, resolved_entity.id, cache_record)
 
             if getattr(resolved_entity, "username", None):
                 logger.debug(
                     "Saved resolved_entity username @%s to cache",
                     resolved_entity.username,
                 )
-                self._heroku_entity_cache[f"@{resolved_entity.username}"] = cache_record
-                self._heroku_entity_cache[resolved_entity.username] = cache_record
+                _put_bounded(
+                    self._heroku_entity_cache,
+                    f"@{resolved_entity.username}",
+                    cache_record,
+                )
+                _put_bounded(
+                    self._heroku_entity_cache,
+                    resolved_entity.username,
+                    cache_record,
+                )
 
-        return copy.deepcopy(resolved_entity)
+        return _clone_cached(resolved_entity) if resolved_entity else resolved_entity
 
     async def get_perms_cached(
         self,
@@ -803,7 +836,7 @@ class CustomTelegramClient(TelegramClient):
             )
         ):
             logger.debug("Using cached perms %s (%s)", hashable_entity, hashable_user)
-            return copy.deepcopy(
+            return _clone_cached(
                 self._heroku_perms_cache[hashable_entity][hashable_user].perms
             )
 
@@ -816,23 +849,33 @@ class CustomTelegramClient(TelegramClient):
                 resolved_perms,
                 exp,
             )
-            self._heroku_perms_cache.setdefault(hashable_entity, {})[
-                hashable_user
-            ] = cache_record
+            _put_bounded(
+                self._heroku_perms_cache.setdefault(hashable_entity, {}),
+                hashable_user,
+                cache_record,
+            )
             logger.debug("Saved hashable_entity %s perms to cache", hashable_entity)
 
             def save_user(key: str | int):
                 nonlocal self, cache_record, user, hashable_user
                 if getattr(user, "id", None):
-                    self._heroku_perms_cache.setdefault(key, {})[user.id] = cache_record
+                    _put_bounded(
+                        self._heroku_perms_cache.setdefault(key, {}),
+                        user.id,
+                        cache_record,
+                    )
 
                 if getattr(user, "username", None):
-                    self._heroku_perms_cache.setdefault(key, {})[
-                        f"@{user.username}"
-                    ] = cache_record
-                    self._heroku_perms_cache.setdefault(key, {})[
-                        user.username
-                    ] = cache_record
+                    _put_bounded(
+                        self._heroku_perms_cache.setdefault(key, {}),
+                        f"@{user.username}",
+                        cache_record,
+                    )
+                    _put_bounded(
+                        self._heroku_perms_cache.setdefault(key, {}),
+                        user.username,
+                        cache_record,
+                    )
 
             if getattr(entity, "id", None):
                 logger.debug("Saved resolved_entity id %s perms to cache", entity.id)
@@ -846,7 +889,7 @@ class CustomTelegramClient(TelegramClient):
                 save_user(f"@{entity.username}")
                 save_user(entity.username)
 
-        return copy.deepcopy(resolved_perms)
+        return _clone_cached(resolved_perms) if resolved_perms else resolved_perms
 
     async def get_fullchannel(
         self,
@@ -893,10 +936,14 @@ class CustomTelegramClient(TelegramClient):
             return self._heroku_fullchannel_cache[hashable_entity].full_channel
 
         result = await self(GetFullChannelRequest(channel=entity))
-        self._heroku_fullchannel_cache[hashable_entity] = CacheRecordFullChannel(
+        _put_bounded(
+            self._heroku_fullchannel_cache,
             hashable_entity,
-            result,
-            exp,
+            CacheRecordFullChannel(
+                hashable_entity,
+                result,
+                exp,
+            ),
         )
         return result
 
@@ -945,10 +992,14 @@ class CustomTelegramClient(TelegramClient):
             return self._heroku_fulluser_cache[hashable_entity].full_user
 
         result = await self(GetFullUserRequest(entity))
-        self._heroku_fulluser_cache[hashable_entity] = CacheRecordFullUser(
+        _put_bounded(
+            self._heroku_fulluser_cache,
             hashable_entity,
-            result,
-            exp,
+            CacheRecordFullUser(
+                hashable_entity,
+                result,
+                exp,
+            ),
         )
         return result
 

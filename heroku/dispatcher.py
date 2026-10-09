@@ -404,7 +404,11 @@ class CommandDispatcher:
             self._db, main.__name__, initiator, self._client.tg_id
         )
 
-        message = utils.censor(event.message)
+        # No utils.censor here: its vars()-walk never reached a phone
+        # attribute (Telethon keeps entities in _entities, and phones are
+        # already masked by herokutl on every RPC result), so the call
+        # was pure per-message overhead
+        message = event.message
 
         if not event.message.message:
             return False
@@ -767,7 +771,8 @@ class CommandDispatcher:
         event: events.NewMessage | events.MessageDeleted,
     ):
         """Handle all incoming messages"""
-        message = utils.censor(getattr(event, "message", event))
+        # See _handle_command: censor was a no-op on Telethon messages
+        message = getattr(event, "message", event)
         message = self._patch_message_emoji_methods(message)
 
         blacklist_chats = self._db.get_nocopy(main.__name__, "blacklist_chats", [])

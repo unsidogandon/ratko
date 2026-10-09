@@ -587,6 +587,12 @@ class Modules:
         self.libraries = []
         self.watchers = []
         self._core_commands = []
+        # alias.lower() -> command name, mirroring self.commands iteration
+        # order; rebuilt whenever the command table changes
+        self._alias_index: dict[str, str] = {}
+        # Set by register*/unregister* so _junk_collector rebuilds the
+        # tables only when they were actually touched
+        self._tables_dirty = False
         self.__approve = []
         self.allclients = allclients
         self.client = client
@@ -603,8 +609,18 @@ class Modules:
         Periodically reloads commands, inline handlers, callback handlers and watchers from loaded
         modules to prevent zombie handlers
         """
+        sweeps = 0
         while True:
             await asyncio.sleep(30)
+            sweeps += 1
+            # Rebuild only when the tables were touched since the last
+            # sweep, plus a periodic full sweep as a zombie-handler
+            # safety net (~30 sweeps = 15 minutes). Formerly every sweep
+            # did 4 full dir() walks per module regardless of changes
+            if not self._tables_dirty and sweeps < 30:
+                continue
+            sweeps = 0
+            self._tables_dirty = False
             commands = {}
             command_handlers = {}
             inline_handlers = {}
@@ -625,6 +641,8 @@ class Modules:
             self.inline_handlers = inline_handlers
             self.callback_handlers = callback_handlers
             self.watchers = watchers
+            self._rebuild_alias_index()
+            self.inline._reset_reverse_lookup_cache()
 
             logger.debug(
                 (
@@ -942,6 +960,9 @@ class Modules:
                 handlers.append(cmd)
             self.commands[name] = cmd
 
+        self._rebuild_alias_index()
+        self._tables_dirty = True
+
         for alias, cmd in self.aliases.copy().items():
             _cmd = cmd.split(maxsplit=1)
             if _cmd[0] in instance.heroku_commands:
@@ -952,6 +973,8 @@ class Modules:
     def register_inline_stuff(self, instance: Module):
         if self._is_module_disabled(instance):
             return
+        self._tables_dirty = True
+        self.inline._reset_reverse_lookup_cache()
         for name, func in instance.heroku_inline_handlers.copy().items():
             if name.lower() in self.inline_handlers:
                 if (
@@ -992,6 +1015,8 @@ class Modules:
             self.callback_handlers.update({name.lower(): func})
 
     def unregister_inline_stuff(self, instance: Module, purpose: str):
+        self._tables_dirty = True
+        self.inline._reset_reverse_lookup_cache()
         for name, func in instance.heroku_inline_handlers.copy().items():
             if name.lower() in self.inline_handlers and (
                 hasattr(func, "__self__")
@@ -1050,6 +1075,8 @@ class Modules:
             return
         with contextlib.suppress(AttributeError):
             _heroku_client_id_logging_tag = copy.copy(self.client.tg_id)  # noqa: F841
+
+        self._tables_dirty = True
 
         for _watcher in self.watchers:
             if _watcher.__self__.__class__.__name__ == instance.__class__.__name__:
@@ -1125,6 +1152,23 @@ class Modules:
 
         self.modules += [instance]
 
+    def _rebuild_alias_index(self) -> None:
+        """Rebuild the alias lookup index from the current command table.
+
+        Mirrors the former find_alias linear scan exactly: first command
+        in self.commands iteration order wins for a given alias.
+        """
+        alias_index = {}
+        for command_name, _command in self.commands.items():
+            aliases = getattr(_command, "aliases", None) or []
+            if not aliases and getattr(_command, "alias", None):
+                aliases = [_command.alias]
+
+            for _alias in aliases:
+                alias_index.setdefault(_alias.lower(), command_name)
+
+        self._alias_index = alias_index
+
     def find_alias(
         self,
         alias: str,
@@ -1133,20 +1177,11 @@ class Modules:
         if not alias:
             return None
 
-        for command_name, _command in self.commands.items():
-            aliases = getattr(_command, "aliases", None) or []
-            if not aliases and getattr(_command, "alias", None):
-                aliases = [_command.alias]
-
-            if not aliases:
-                continue
-
-            if any(
-                alias.lower() == _alias.lower()
-                and alias.lower() not in self._core_commands
-                for _alias in aliases
-            ):
-                return command_name
+        # Core command names never resolve through aliases (checked at
+        # query time, matching the former per-candidate condition)
+        lowered = alias.lower()
+        if lowered not in self._core_commands and lowered in self._alias_index:
+            return self._alias_index[lowered]
 
         if alias in self.aliases and include_legacy:
             return self.aliases[alias]
@@ -1506,6 +1541,7 @@ class Modules:
                 method.stop()
 
     def unregister_commands(self, instance: Module, purpose: str):
+        self._tables_dirty = True
         for name, handlers in list(self._command_handlers.items()):
             remaining = [
                 handler
@@ -1524,7 +1560,10 @@ class Modules:
                         if command.split()[0].lower() == name:
                             del self.aliases[alias]
 
+        self._rebuild_alias_index()
+
     def unregister_watchers(self, instance: Module, purpose: str):
+        self._tables_dirty = True
         for _watcher in self.watchers.copy():
             if _watcher.__self__.__class__.__name__ == instance.__class__.__name__:
                 logger.debug(

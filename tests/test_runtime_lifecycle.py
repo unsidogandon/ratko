@@ -121,7 +121,7 @@ class RegistryNamespaceTest(unittest.IsolatedAsyncioTestCase):
                 "register_module", "complete_registration", "_forget_module_namespace",
                 "_shutdown_module", "_finish_shutdown", "_finish_shutdown_handlers",
                 "_wait_module_tasks", "_consume_shutdown_result", "send_ready_one",
-                "_send_ready_one", "find_alias",
+                "_send_ready_one", "find_alias", "_rebuild_alias_index",
             ), self.namespace,
             static=("_forget_module_namespace", "_consume_shutdown_result"),
         )
@@ -130,6 +130,7 @@ class RegistryNamespaceTest(unittest.IsolatedAsyncioTestCase):
         self.registry.client = SimpleNamespace(tg_id=1)
         self.registry._db = {}
         self.registry._remove_core_protection = False
+        self.registry._alias_index = {}
         self.registry.translator = SimpleNamespace(
             load_module_translations=AsyncMock(return_value={"hello": "translated"})
         )
@@ -405,6 +406,7 @@ class RegistryNamespaceTest(unittest.IsolatedAsyncioTestCase):
         self.registry.commands = {"example": SimpleNamespace(aliases=["first", "SECOND"])}
         self.registry._core_commands = set()
         self.registry.aliases = {}
+        self.registry._rebuild_alias_index()
         self.assertEqual(self.registry.find_alias("second"), "example")
         self.assertIsNone(self.registry.find_alias("missing"))
 
@@ -412,10 +414,12 @@ class RegistryNamespaceTest(unittest.IsolatedAsyncioTestCase):
         self.registry.commands = {"example": SimpleNamespace(alias="single")}
         self.registry._core_commands = {"protected"}
         self.registry.aliases = {"legacy": "example arguments"}
+        self.registry._rebuild_alias_index()
         self.assertEqual(self.registry.find_alias("SINGLE"), "example")
         self.assertIsNone(self.registry.find_alias("legacy"))
         self.assertEqual(self.registry.find_alias("legacy", True), "example arguments")
         self.registry.commands["example"].aliases = ["protected"]
+        self.registry._rebuild_alias_index()
         self.assertIsNone(self.registry.find_alias("protected"))
 
 
@@ -971,6 +975,61 @@ class ExceptionReportingTest(unittest.IsolatedAsyncioTestCase):
         await command_exc(None, message)
         self.logger.exception.assert_called_once_with("Command failed")
         message.reply.assert_awaited_once()
+
+
+class ReverseLookupTest(unittest.TestCase):
+    def setUp(self):
+        self.namespace = {"itertools": itertools}
+        utils_type = type("Utils", (), {})
+        for name in ("_reverse_method_lookup", "_reset_reverse_lookup_cache"):
+            setattr(
+                utils_type,
+                name,
+                load_definition(
+                    "heroku/inline/utils.py", f"Utils.{name}", self.namespace
+                ),
+            )
+        self.manager = utils_type()
+        self.manager._rev_lookup_cache = {}
+        self.inline_handler = lambda: None
+        self.callback_handler = lambda: None
+        self.manager._allmodules = SimpleNamespace(
+            inline_handlers={"inl": self.inline_handler},
+            callback_handlers={"cb": self.callback_handler},
+        )
+
+    def empty_tables(self):
+        self.manager._allmodules = SimpleNamespace(
+            inline_handlers={}, callback_handlers={}
+        )
+
+    def test_lookups_resolve_names_from_both_tables(self):
+        self.assertEqual(
+            self.manager._reverse_method_lookup(self.inline_handler), "inl"
+        )
+        self.assertEqual(
+            self.manager._reverse_method_lookup(self.callback_handler), "cb"
+        )
+        self.assertIsNone(self.manager._reverse_method_lookup(lambda: None))
+
+    def test_repeated_lookups_are_served_from_the_cache(self):
+        self.manager._reverse_method_lookup(self.inline_handler)
+        # The tables are gone, but the cached identity still resolves
+        self.empty_tables()
+        self.assertEqual(
+            self.manager._reverse_method_lookup(self.inline_handler), "inl"
+        )
+
+    def test_cache_reset_forgets_resolved_names(self):
+        self.manager._reverse_method_lookup(self.inline_handler)
+        self.manager._reset_reverse_lookup_cache()
+        self.empty_tables()
+        self.assertIsNone(self.manager._reverse_method_lookup(self.inline_handler))
+
+    def test_cache_size_stays_bounded(self):
+        for _ in range(600):
+            self.manager._reverse_method_lookup(lambda: None)
+        self.assertLessEqual(len(self.manager._rev_lookup_cache), 513)
 
 
 class TopicGuesserTest(unittest.IsolatedAsyncioTestCase):

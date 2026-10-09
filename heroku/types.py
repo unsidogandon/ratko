@@ -1057,8 +1057,12 @@ class CacheRecordEntity:
         resolved_entity: EntityLike,
         exp: int,
     ):
-        self.entity = copy.deepcopy(resolved_entity)
-        self._hashable_entity = copy.deepcopy(hashable_entity)
+        # The entity is stored as-is: every read hands out a shallow clone
+        # (see CustomTelegramClient.get_entity), so the cached object is
+        # never exposed directly. Previously it was deepcopied here AND
+        # again on return, copying every resolved entity twice.
+        self.entity = resolved_entity
+        self._hashable_entity = hashable_entity
         self._exp = round(time.time() + exp)
         self.ts = time.time()
 
@@ -1090,9 +1094,13 @@ class CacheRecordPerms:
         resolved_perms: EntityLike,
         exp: int,
     ):
-        self.perms = copy.deepcopy(resolved_perms)
-        self._hashable_entity = copy.deepcopy(hashable_entity)
-        self._hashable_user = copy.deepcopy(hashable_user)
+        # Stored as-is; every read returns a shallow clone (see
+        # CustomTelegramClient.get_perms_cached). Previously the perms
+        # object was deepcopied here AND again on return, plus two more
+        # deepcopies of the plain int keys.
+        self.perms = resolved_perms
+        self._hashable_entity = hashable_entity
+        self._hashable_user = hashable_user
         self._exp = round(time.time() + exp)
         self.ts = time.time()
 
@@ -1130,7 +1138,7 @@ class CacheRecordFullChannel:
         return hash(record) == hash(self)
 
     def __hash__(self) -> int:
-        return hash((self._hashable_entity, self._hashable_user))
+        return hash(self.channel_id)
 
     def __str__(self) -> str:
         return f"CacheRecordFullChannel of {self.channel_id}"
@@ -1157,13 +1165,13 @@ class CacheRecordFullUser:
         return hash(record) == hash(self)
 
     def __hash__(self) -> int:
-        return hash((self._hashable_entity, self._hashable_user))
+        return hash(self.user_id)
 
     def __str__(self) -> str:
         return f"CacheRecordFullUser of {self.user_id}"
 
     def __repr__(self) -> str:
-        return f"CacheRecordFullUser(channel_id={self.user_id}(...), exp={self._exp})"
+        return f"CacheRecordFullUser(user_id={self.user_id}(...), exp={self._exp})"
 
 
 def get_commands(mod: Module) -> dict:

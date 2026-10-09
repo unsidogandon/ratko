@@ -272,6 +272,126 @@ class DatabasePersistenceTest(unittest.TestCase):
             self.db.get_nocopy("TestMod", "missing", "fallback"), "fallback"
         )
 
+    def test_revision_history_is_capped_at_two(self):
+        for value in (1, 2, 3, 4):
+            self.db["TestMod"]["value"] = value
+            self.db._next_revision_call = 0
+            self.assertTrue(self.db.save())
+        self.assertEqual(len(self.db._revisions), 2)
+        self.assertEqual(
+            json.loads(self.db._revisions[-1])["TestMod"]["value"], 4
+        )
+        self.assertEqual(
+            json.loads(self.db._revisions[0])["TestMod"]["value"], 3
+        )
+
+
+class EntityCacheTest(unittest.TestCase):
+    def setUp(self):
+        self.namespace = {"time": time}
+        for name in ("_HEROKU_CACHE_LIMIT", "_clone_cached", "_put_bounded"):
+            load_definition("heroku/tl_cache.py", name, self.namespace)
+        for name in (
+            "CacheRecordEntity",
+            "CacheRecordPerms",
+            "CacheRecordFullChannel",
+            "CacheRecordFullUser",
+        ):
+            load_definition("heroku/types.py", name, self.namespace)
+
+    def test_clone_cached_produces_an_independent_shallow_copy(self):
+        class Fake:
+            def __init__(self):
+                self.field = "value"
+                self.nested = {"list": [1]}
+
+        original = Fake()
+        clone = self.namespace["_clone_cached"](original)
+        self.assertIsNot(clone, original)
+        self.assertIsInstance(clone, Fake)
+        self.assertEqual(clone.field, "value")
+        clone.field = "changed"
+        self.assertEqual(original.field, "value")
+        # nested fields stay shared (documented contract)
+        self.assertIs(clone.nested, original.nested)
+
+    def test_clone_cached_works_on_real_tl_objects(self):
+        from herokutl.tl.types import User
+
+        user = User.__new__(User)
+        user.id = 42
+        user.phone = "+70000000000"
+        clone = self.namespace["_clone_cached"](user)
+        self.assertIsInstance(clone, User)
+        self.assertEqual(clone.id, 42)
+        self.assertEqual(clone.phone, "+70000000000")
+        clone.phone = "changed"
+        self.assertEqual(user.phone, "+70000000000")
+
+    def test_put_bounded_evicts_oldest_keys_over_the_cap(self):
+        self.namespace["_HEROKU_CACHE_LIMIT"] = 8
+        put = self.namespace["_put_bounded"]
+        cache = {}
+        for key in range(12):
+            put(cache, key, f"record-{key}")
+        self.assertEqual(len(cache), 8)
+        self.assertIn(11, cache)
+        self.assertIn(10, cache)
+        self.assertNotIn(0, cache)
+
+    def test_cache_records_store_objects_without_copying(self):
+        entity = SimpleNamespace(id=1)
+        record = self.namespace["CacheRecordEntity"](123, entity, 300)
+        self.assertIs(record.entity, entity)
+        self.assertIs(record._hashable_entity, 123)
+        self.assertFalse(record.expired)
+
+        perms = SimpleNamespace(is_admin=True)
+        perms_record = self.namespace["CacheRecordPerms"](1, 2, perms, 300)
+        self.assertIs(perms_record.perms, perms)
+        self.assertIs(perms_record._hashable_user, 2)
+
+    def test_full_records_are_hashable(self):
+        channel_record = self.namespace["CacheRecordFullChannel"](1, object(), 300)
+        user_record = self.namespace["CacheRecordFullUser"](2, object(), 300)
+        self.assertEqual(hash(channel_record), hash(channel_record))
+        self.assertEqual(hash(user_record), hash(user_record))
+        self.assertEqual(channel_record, channel_record)
+        self.assertEqual(user_record, user_record)
+
+
+class TaskFactoryTest(unittest.TestCase):
+    def setUp(self):
+        self.namespace = {"asyncio": asyncio, "sys": sys}
+        self.namespace["_code_name"] = load_definition(
+            "heroku/main.py", "_code_name", self.namespace
+        )
+        self.factory = load_definition(
+            "heroku/main.py", "_task_factory", self.namespace
+        )
+
+    def test_task_origin_is_captured_from_a_single_frame(self):
+        async def coro():
+            return None
+
+        loop = asyncio.new_event_loop()
+
+        def creator():
+            return self.factory(loop, coro())
+
+        try:
+            task = creator()
+            self.assertEqual(len(task._ratko_created_at), 1)
+            self.assertIn("test_task_origin", task._ratko_created_at[0])
+            self.assertTrue(str(task.get_name()).startswith("ratko:"))
+            task.cancel()
+            try:
+                loop.run_until_complete(task)
+            except asyncio.CancelledError:
+                pass
+        finally:
+            loop.close()
+
 
 class UserPrefixesTest(unittest.TestCase):
     def setUp(self):

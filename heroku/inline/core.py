@@ -162,6 +162,8 @@ class InlineManager(
         self._custom_map: dict[str, callable] = {}
         self.fsm: dict[str, str] = {}
         self._error_events: dict[str, asyncio.Event] = {}
+        # id(handler) -> (handler, name) cache for _reverse_method_lookup
+        self._rev_lookup_cache: dict[int, tuple] = {}
 
         self._markup_ttl = 60 * 60 * 24
         self.init_complete = False

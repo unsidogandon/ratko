@@ -91,9 +91,9 @@ class Database(dict):
         super().__init__()
         self._client: CustomTelegramClient = client
         self._next_revision_call: int = 0
-        self._revisions: list[str] = []
+        self._revisions: list[bytes] = []
         self._save_scheduled: bool = False
-        self._last_saved_data: str | None = None
+        self._last_saved_data: bytes | str | None = None
         self._me: User = None
         self._redis: typing.Any = None
         self._saving_task: asyncio.Future = None
@@ -398,7 +398,10 @@ class Database(dict):
             self._revisions += [data]
             self._next_revision_call = time.time() + 3
 
-        while len(self._revisions) > 5:
+        # Two full snapshots (~2×14 MB on a big account) are enough to
+        # recover from one broken revision; the previous five kept
+        # ~70 MB of history alive for no realistic benefit
+        while len(self._revisions) > 2:
             self._revisions.pop(0)
 
         if self._redis:

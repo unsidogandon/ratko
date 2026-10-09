@@ -387,7 +387,7 @@ class SecurityManager:
         )
 
     def check_tsec(self, user_id: int, command: str) -> bool:
-        for info in self._sgroups.copy().values():
+        for info in self._sgroups.values():
             if user_id in info.users:
                 for permission in info.permissions:
                     if (
@@ -398,7 +398,7 @@ class SecurityManager:
                     ):
                         return True
 
-        for info in self._tsec_user.copy():
+        for info in self._tsec_user:
             if info["target"] == user_id and (
                 info["rule_type"] == "command"
                 and info["rule"] == command
@@ -528,7 +528,12 @@ class SecurityManager:
         if callable(func):
             command = self._client.loader.find_alias(cmd, include_legacy=True) or cmd
 
-            for info in self._sgroups.copy().values():
+            # These loops contain no awaits: in the single-threaded event
+            # loop nothing can mutate the structures mid-iteration (all
+            # mutations happen in _reload_rights/add_rule/remove_rules,
+            # which own their own copies). Iterating the live structures
+            # used to copy them on every security check
+            for info in self._sgroups.values():
                 if user_id in info.users:
                     for permission in info.permissions:
                         if (
@@ -547,7 +552,7 @@ class SecurityManager:
                             )
                             return True
 
-            for info in self._tsec_user.copy():
+            for info in self._tsec_user:
                 if info["target"] == user_id:
                     if info["rule_type"] == "command" and info["rule"] == command:
                         logger.debug("tsec match for user %s", command)
@@ -564,7 +569,7 @@ class SecurityManager:
                         return True
 
             if chat:
-                for info in self._tsec_chat.copy():
+                for info in self._tsec_chat:
                     if info["target"] == chat:
                         if info["rule_type"] == "command" and info["rule"] == command:
                             logger.debug("tsec match for %s", command)
