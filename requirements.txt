@@ -1,4 +1,4 @@
-herokutl @ git+https://github.com/unsidogandon/ratko-tl@2.2
+herokutl @ git+https://github.com/unsidogandon/ratko-tl@2.3
 pyaes
 cryptg
 isal
