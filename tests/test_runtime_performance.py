@@ -8,11 +8,16 @@ import functools
 import html
 import json
 import logging
+import os
 import re
+import shutil
 import sys
+import tempfile
 import threading
 import time
 import unittest
+
+import orjson
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -58,6 +63,35 @@ def is_serializable(value):
     return True
 
 
+class AtomicWriteTest(unittest.TestCase):
+    def setUp(self):
+        self.namespace = {"os": os, "tempfile": tempfile, "Path": Path}
+        self.write = load_definition(
+            "heroku/main.py", "_atomic_write_text", self.namespace
+        )
+        self.directory = Path(tempfile.mkdtemp(prefix="ratko-atomic-", dir="/tmp/opencode"))
+
+    def tearDown(self):
+        shutil.rmtree(self.directory, ignore_errors=True)
+
+    def test_bytes_payloads_are_written_verbatim(self):
+        target = self.directory / "db.json"
+        self.write(target, b'{"a": 1}')
+        self.assertEqual(target.read_bytes(), b'{"a": 1}')
+
+    def test_text_payloads_keep_utf8_encoding(self):
+        target = self.directory / "config.json"
+        self.write(target, '{"тест": "ok"}')
+        self.assertEqual(target.read_text(encoding="utf-8"), '{"тест": "ok"}')
+
+    def test_replacement_leaves_no_temporary_files(self):
+        target = self.directory / "db.json"
+        self.write(target, b"first")
+        self.write(target, b"second")
+        self.assertEqual(target.read_bytes(), b"second")
+        self.assertEqual(list(self.directory.iterdir()), [target])
+
+
 class DatabasePersistenceTest(unittest.TestCase):
     def setUp(self):
         self.writer = Mock()
@@ -66,6 +100,7 @@ class DatabasePersistenceTest(unittest.TestCase):
             "collections": collections,
             "copy": copy,
             "json": json,
+            "orjson": orjson,
             "time": time,
             "logger": Mock(),
             "main": SimpleNamespace(_atomic_write_text=self.writer),
@@ -83,8 +118,37 @@ class DatabasePersistenceTest(unittest.TestCase):
 
     def test_first_save_writes_the_current_snapshot(self):
         self.assertTrue(self.db.save())
+        self.assertIsInstance(self.writer.call_args.args[1], bytes)
         self.assertEqual(json.loads(self.writer.call_args.args[1]), dict(self.db))
         self.assertEqual(len(self.db._revisions), 1)
+
+    def test_snapshot_matches_stdlib_json_for_non_str_keys(self):
+        self.db[12345] = {"inner": {678: "ok"}}
+        self.assertTrue(self.db.save())
+        written = json.loads(self.writer.call_args.args[1])
+        self.assertEqual(written, json.loads(json.dumps(dict(self.db))))
+        self.assertEqual(written["12345"]["inner"]["678"], "ok")
+
+    def test_nan_values_are_saved_as_null(self):
+        self.db["TestMod"]["value"] = float("nan")
+        self.assertTrue(self.db.save())
+        written = json.loads(self.writer.call_args.args[1])
+        self.assertIsNone(written["TestMod"]["value"])
+
+    def test_datetime_values_are_serialized_natively(self):
+        import datetime
+
+        self.db["TestMod"]["value"] = datetime.datetime(2026, 1, 1, 12, 0)
+        self.assertTrue(self.db.save())
+        written = json.loads(self.writer.call_args.args[1])
+        self.assertEqual(written["TestMod"]["value"], "2026-01-01T12:00:00")
+
+    def test_unserializable_values_trigger_revision_restore(self):
+        self.assertTrue(self.db.save())
+        self.db["TestMod"]["value"] = object()
+        with self.assertRaises(RuntimeError):
+            self.db.save()
+        self.assertEqual(self.db["TestMod"]["value"], 1)
 
     def test_unchanged_periodic_saves_do_not_write_or_duplicate_revisions(self):
         self.db.save()

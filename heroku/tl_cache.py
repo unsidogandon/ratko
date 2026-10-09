@@ -14,6 +14,7 @@ import asyncio
 import copy
 import inspect
 import logging
+import sys
 import time
 import typing
 from collections.abc import Callable
@@ -952,18 +953,34 @@ class CustomTelegramClient(TelegramClient):
         return result
 
     @staticmethod
+    def _capture_caller_frames() -> list:
+        """
+        Lightweight call-stack snapshot for topic guessing.
+
+        Equivalent to the frames of inspect.stack(), but ~100x cheaper:
+        no FrameInfo objects and no per-frame linecache lookups, which
+        dominated the latency of every outgoing message.
+        """
+        frames = []
+        frame = sys._getframe(1)
+        while frame is not None:
+            frames.append(frame)
+            frame = frame.f_back
+        return frames
+
+    @staticmethod
     def _find_message_obj_in_frame(
         chat_id: int,
-        frame: inspect.FrameInfo,
+        frame,
     ) -> Message | None:
         """
-        Finds the message object from the frame
+        Finds the message object in a plain frame
         """
         logger.debug("Finding message object in frame %s", frame)
         return next(
             (
                 obj
-                for obj in frame.frame.f_locals.values()
+                for obj in frame.f_locals.values()
                 if isinstance(obj, Message)
                 and getattr(obj.reply_to, "forum_topic", False)
                 and chat_id == getattr(obj.peer_id, "channel_id", None)
@@ -974,26 +991,23 @@ class CustomTelegramClient(TelegramClient):
     async def _find_message_obj_in_stack(
         self,
         chat: EntityLike,
-        stack: list[inspect.FrameInfo],
+        stack: list,
     ) -> Message | None:
         """
         Finds the message object from the stack
         """
         chat_id = (await self.get_entity(chat, exp=0)).id
         logger.debug("Finding message object in stack for chat %s", chat_id)
-        return next(
-            (
-                self._find_message_obj_in_frame(chat_id, frame_info)
-                for frame_info in stack
-                if self._find_message_obj_in_frame(chat_id, frame_info)
-            ),
-            None,
-        )
+        for frame in stack:
+            message = self._find_message_obj_in_frame(chat_id, frame)
+            if message is not None:
+                return message
+        return None
 
     async def _find_topic_in_stack(
         self,
         chat: EntityLike,
-        stack: list[inspect.FrameInfo],
+        stack: list,
     ) -> Message | None:
         """
         Finds the message object from the stack
@@ -1008,7 +1022,7 @@ class CustomTelegramClient(TelegramClient):
     async def _topic_guesser(
         self,
         native_method: typing.Callable[..., typing.Awaitable[Message]],
-        stack: list[inspect.FrameInfo],
+        stack: list,
         *args,
         **kwargs,
     ):
@@ -1036,7 +1050,7 @@ class CustomTelegramClient(TelegramClient):
         kwargs = self._exteragram_transform_kwargs(kwargs, "caption")
         return await self._topic_guesser(
             super().send_file,
-            inspect.stack(),
+            self._capture_caller_frames(),
             *args,
             **kwargs,
         )
@@ -1048,7 +1062,7 @@ class CustomTelegramClient(TelegramClient):
         kwargs = self._exteragram_transform_kwargs(kwargs, "message", "caption")
         return await self._topic_guesser(
             super().send_message,
-            inspect.stack(),
+            self._capture_caller_frames(),
             *args,
             **kwargs,
         )

@@ -352,7 +352,7 @@ def _read_config() -> dict:
     return _CONFIG_CACHE
 
 
-def _atomic_write_text(path: Path, content: str) -> None:
+def _atomic_write_text(path: Path, content: str | bytes) -> None:
     if path.is_symlink():
         raise ValueError("Refusing to write private data through a symlink")
 
@@ -364,7 +364,12 @@ def _atomic_write_text(path: Path, content: str) -> None:
     )
     temporary = Path(temporary_name)
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as file:
+        if isinstance(content, bytes):
+            # Bytes are written verbatim (already-encoded payloads, e.g. orjson)
+            file = os.fdopen(descriptor, "wb")
+        else:
+            file = os.fdopen(descriptor, "w", encoding="utf-8")
+        with file:
             file.write(content)
             file.flush()
             os.fsync(file.fileno())

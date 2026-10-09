@@ -20,6 +20,7 @@ import signal
 import sys
 import time
 import traceback
+import typing
 import unittest
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -685,6 +686,160 @@ class InlineConstructorTest(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(callback["unit_id"], result.unit_id)
                 await self.manager._unload_unit(result.unit_id)
                 self.assertEqual(self.manager._custom_map, {})
+
+
+class TopicGuesserTest(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.Message = type("Message", (), {})
+        self.TopicDeletedError = type("TopicDeletedError", (Exception,), {})
+        self.namespace = {
+            "asyncio": asyncio,
+            "inspect": inspect,
+            "sys": sys,
+            "typing": typing,
+            "logger": Mock(),
+            "Message": self.Message,
+            "TopicDeletedError": self.TopicDeletedError,
+            "EntityLike": object,
+        }
+        client_type = type("CustomTelegramClient", (), {})
+        bind_methods(
+            client_type,
+            "heroku/tl_cache.py",
+            "CustomTelegramClient",
+            (
+                "_capture_caller_frames",
+                "_find_message_obj_in_frame",
+                "_find_message_obj_in_stack",
+                "_find_topic_in_stack",
+                "_topic_guesser",
+            ),
+            self.namespace,
+            static=("_capture_caller_frames", "_find_message_obj_in_frame"),
+        )
+        self.client = client_type()
+        self.client.get_entity = AsyncMock(return_value=SimpleNamespace(id=42))
+
+    def forum_message(self, channel_id=42, topic_id=77):
+        message = self.Message()
+        message.reply_to = SimpleNamespace(
+            forum_topic=True,
+            reply_to_top_id=None,
+            reply_to_msg_id=topic_id,
+        )
+        message.peer_id = SimpleNamespace(channel_id=channel_id)
+        return message
+
+    @staticmethod
+    def frame_with(**locals_):
+        return SimpleNamespace(f_locals=locals_)
+
+    def test_capture_caller_frames_returns_plain_frames(self):
+        captured = {}
+
+        def command_like():
+            local_marker = object()
+            captured["frames"] = self.client._capture_caller_frames()
+            captured["marker"] = local_marker
+
+        command_like()
+        frames = captured["frames"]
+        self.assertTrue(frames)
+        self.assertEqual(frames[0].f_code.co_name, "command_like")
+        self.assertIs(frames[0].f_locals["local_marker"], captured["marker"])
+        self.assertTrue(frames[1].f_code.co_name.startswith("test_"))
+        for frame in frames:
+            self.assertNotIsInstance(frame, inspect.FrameInfo)
+
+    def test_find_message_obj_in_frame_matches_only_topic_messages(self):
+        message = self.forum_message()
+        frame = self.frame_with(message=message, noise="value")
+        self.assertIs(self.client._find_message_obj_in_frame(42, frame), message)
+        self.assertIsNone(self.client._find_message_obj_in_frame(43, frame))
+        message.reply_to = SimpleNamespace(forum_topic=False)
+        self.assertIsNone(self.client._find_message_obj_in_frame(42, frame))
+
+    async def test_find_message_in_stack_returns_first_match(self):
+        first = self.forum_message(topic_id=1)
+        second = self.forum_message(topic_id=2)
+        stack = [
+            self.frame_with(),
+            self.frame_with(message=first),
+            self.frame_with(message=second),
+        ]
+        self.assertIs(await self.client._find_message_obj_in_stack(42, stack), first)
+        self.client.get_entity.assert_awaited_once()
+
+    async def test_find_topic_in_stack_resolves_the_reply_target(self):
+        message = self.forum_message(topic_id=77)
+        message.reply_to.reply_to_top_id = 99
+        stack = [self.frame_with(message=message)]
+        self.assertEqual(await self.client._find_topic_in_stack(42, stack), 99)
+        message.reply_to.reply_to_top_id = None
+        self.assertEqual(await self.client._find_topic_in_stack(42, stack), 77)
+
+    async def test_successful_send_never_touches_the_stack(self):
+        class Poison(list):
+            def __iter__(self):
+                raise AssertionError("stack must not be touched on success")
+
+            def __len__(self):
+                raise AssertionError("stack must not be touched on success")
+
+        native = AsyncMock(return_value="sent")
+        self.assertEqual(
+            await self.client._topic_guesser(native, Poison(), 42, message="hi"),
+            "sent",
+        )
+        native.assert_awaited_once_with(42, message="hi")
+
+    async def test_topic_deleted_retries_with_the_guessed_topic(self):
+        native = AsyncMock(side_effect=[self.TopicDeletedError(), "sent"])
+        seen = {}
+
+        async def find_topic(chat, stack):
+            seen["chat"] = chat
+            seen["stack"] = stack
+            return 55
+
+        self.client._find_topic_in_stack = find_topic
+        self.assertEqual(
+            await self.client._topic_guesser(native, [self.frame_with()], 42),
+            "sent",
+        )
+        self.assertEqual(native.await_count, 2)
+        self.assertEqual(seen["chat"], 42)
+        self.assertEqual(native.call_args.kwargs["reply_to"], 55)
+
+    async def test_topic_deleted_without_topic_reraises(self):
+        native = AsyncMock(side_effect=self.TopicDeletedError())
+        self.client._find_topic_in_stack = AsyncMock(return_value=None)
+        with self.assertRaises(self.TopicDeletedError):
+            await self.client._topic_guesser(native, [], 42)
+
+    async def test_no_retry_guard_skips_the_lookup(self):
+        native = AsyncMock(side_effect=self.TopicDeletedError())
+        self.client._find_topic_in_stack = AsyncMock()
+        with self.assertRaises(self.TopicDeletedError):
+            await self.client._topic_guesser(native, [], 42, _topic_no_retry=True)
+        self.client._find_topic_in_stack.assert_not_awaited()
+
+    async def test_full_retry_finds_the_message_in_captured_frames(self):
+        async def command_like():
+            message = self.forum_message(topic_id=77)
+
+            async def native(chat, **kwargs):
+                if "reply_to" not in kwargs:
+                    raise self.TopicDeletedError()
+                return "sent"
+
+            return await self.client._topic_guesser(
+                native,
+                self.client._capture_caller_frames(),
+                42,
+            )
+
+        self.assertEqual(await command_like(), "sent")
 
 
 class TerminalLifecycleTest(unittest.IsolatedAsyncioTestCase):

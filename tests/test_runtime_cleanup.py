@@ -163,6 +163,53 @@ class TranslationPackTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.translator._data, {"custom.key": "value"})
 
 
+class StringsFallbackTest(unittest.TestCase):
+    def setUp(self):
+        self.rand = Mock(
+            side_effect=AssertionError("utils.rand must not run per string lookup")
+        )
+        self.namespace = {
+            "__name__": "heroku.translations",
+            "logger": Mock(),
+            "utils": SimpleNamespace(rand=self.rand),
+            "iter_language_codes": lambda value: (value,),
+            "_MISSING_STRINGS_ATTR": "_ratko_missing_strings_",
+        }
+        self.strings_cls = load_definition(
+            "heroku/translations.py", "Strings", self.namespace
+        )
+        self.mod = SimpleNamespace(
+            __module__="heroku.modules.fakemod",
+            strings={"name": "Base", "shared": "Base shared"},
+            strings_en={"name": "English"},
+        )
+        self.translator = SimpleNamespace(
+            db=SimpleNamespace(get=lambda *args, **kwargs: "en"),
+            getkey=lambda key: None,
+            raw_data={},
+        )
+
+    def test_translated_keys_are_taken_from_language_strings(self):
+        strings = self.strings_cls(self.mod, self.translator)
+        self.assertEqual(strings["name"], "English")
+        self.rand.assert_not_called()
+
+    def test_missing_keys_fall_back_to_base_strings_without_randomness(self):
+        strings = self.strings_cls(self.mod, self.translator)
+        self.assertEqual(strings["shared"], "Base shared")
+        self.assertEqual(strings["missing"], "Unknown strings: missing")
+        self.rand.assert_not_called()
+
+    def test_modules_without_language_dicts_use_base_strings(self):
+        mod = SimpleNamespace(
+            __module__="heroku.modules.fakemod",
+            strings={"name": "Base"},
+        )
+        strings = self.strings_cls(mod, self.translator)
+        self.assertEqual(strings["name"], "Base")
+        self.rand.assert_not_called()
+
+
 class RegistryLifecycleTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.settings = {"disabled_modules": [], "disabled_commands": {}}

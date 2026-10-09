@@ -20,6 +20,8 @@ import re
 import time
 import typing
 
+import orjson
+
 try:
     import redis
 except ImportError:
@@ -370,13 +372,19 @@ class Database(dict):
     def save(self) -> bool:
         """Save changed database content, including direct edits to nested values."""
         try:
-            data = json.dumps(self)
+            # orjson is ~8x faster than stdlib json on large snapshots and
+            # stringifies non-str keys the same way (OPT_NON_STR_KEYS).
+            # It is also strictly wider on input: values stdlib tolerates but
+            # cannot express (NaN/Infinity) become null; types stdlib rejects
+            # (datetime, uuid, dataclass) are serialized natively instead of
+            # triggering an autofix restore.
+            data = orjson.dumps(self, option=orjson.OPT_NON_STR_KEYS)
         except (TypeError, ValueError):
             if not self.process_db_autofix(self):
                 self._restore_revision()
 
             try:
-                data = json.dumps(self)
+                data = orjson.dumps(self, option=orjson.OPT_NON_STR_KEYS)
             except (TypeError, ValueError):
                 self._restore_revision()
 

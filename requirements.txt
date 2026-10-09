@@ -1,6 +1,7 @@
 herokutl @ git+https://github.com/unsidogandon/ratko-tl@2.2
 pyaes
 cryptg
+isal
 gitpython==3.1.50
 deep-translator
 meval==2.5

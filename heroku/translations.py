@@ -306,6 +306,12 @@ class ExternalTranslator(BaseTranslator):
         }
 
 
+# getattr() sentinel: a never-existing attribute name. It only serves as the
+# `next()` default when no `strings_<lang>` attribute matched, so getattr falls
+# back to the base strings. Must never evaluate anything per lookup.
+_MISSING_STRINGS_ATTR = "_ratko_missing_strings_"
+
+
 class Strings:
     def __init__(self, mod: Module, translator: Translator):  # skipcq: PYL-W0621
         self._mod = mod
@@ -358,7 +364,7 @@ class Strings:
                             and isinstance(getattr(self._mod, f"strings_{lang}"), dict)
                             and key in getattr(self._mod, f"strings_{lang}")
                         ),
-                        utils.rand(32),
+                        _MISSING_STRINGS_ATTR,
                     ),
                     self._base_strings,
                 ).get(key)
