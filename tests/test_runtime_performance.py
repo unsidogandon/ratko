@@ -306,6 +306,13 @@ class UserPrefixesTest(unittest.TestCase):
         db = self.make_db(command_prefix="!", command_prefixes={})
         self.assertEqual(self.user_prefixes(db, "heroku.main", 42, 1), ["!"])
 
+    def test_duck_typed_dbs_without_get_nocopy_still_work(self):
+        values = {"command_prefix": "!", "command_prefix_aliases": ["."]}
+        db = SimpleNamespace(
+            get=lambda owner, key, default=None: values.get(key, default)
+        )
+        self.assertEqual(self.user_prefixes(db, "heroku.main"), ["!", "."])
+
 
 class RedactPipelineTest(unittest.TestCase):
     def setUp(self):

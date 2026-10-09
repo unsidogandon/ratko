@@ -17,7 +17,6 @@ import collections
 import contextlib
 import copy
 import html
-import inspect
 import logging
 from collections.abc import Callable
 import re
@@ -668,7 +667,10 @@ class CommandDispatcher:
     async def command_exc(self, _, message: Message):
         """Handle command exceptions."""
         exc = sys.exc_info()[1]
-        logger.exception("Command failed", extra={"stack": inspect.stack()})
+        # The caller stack for attribution is captured cheaply inside
+        # find_caller (from_exc_info passes the record through); building a
+        # full FrameInfo stack here cost milliseconds on every exception
+        logger.exception("Command failed")
         if isinstance(exc, RPCError):
             if isinstance(exc, FloodWaitError):
                 hours = exc.seconds // 3600
@@ -716,7 +718,8 @@ class CommandDispatcher:
             await (message.edit if message.out else message.reply)(redact(txt))
 
     async def watcher_exc(self, *_):
-        logger.exception("Error running watcher", extra={"stack": inspect.stack()})
+        # See command_exc: the caller stack is captured in find_caller
+        logger.exception("Error running watcher")
 
     async def _handle_tags(
         self,
@@ -832,7 +835,7 @@ class CommandDispatcher:
         *args,
     ):
         # Will be used to determine, which client caused logging messages
-        # parsed via inspect.stack()
+        # parsed via _get_logging_caller
         _heroku_client_id_logging_tag = copy.copy(self.client.tg_id)  # noqa: F841
 
         module = getattr(func, "__self__", None)

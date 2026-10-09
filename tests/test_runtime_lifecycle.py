@@ -877,7 +877,7 @@ class ApiProtectionTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_gate_waits_for_the_deadline_without_freezing_the_loop(self):
         self.mod._gate_until = time.perf_counter() + 0.05
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         started = loop.time()
         await self.call()
         self.assertGreaterEqual(loop.time() - started, 0.05)
@@ -918,6 +918,59 @@ class ApiProtectionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(wrapper.args, (plain_old_call,))
         self.assertTrue(wrapper._heroku_overwritten)
         self.assertIs(client._old_call_rewritten, plain_old_call)
+
+
+class ExceptionReportingTest(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.logger = Mock()
+        self.namespace = {
+            "sys": sys,
+            "logger": self.logger,
+            "contextlib": contextlib,
+            "traceback": traceback,
+            "utils": SimpleNamespace(escape_html=html.escape),
+            "redact": lambda text: text,
+            "main": SimpleNamespace(__name__="heroku.main"),
+            "Message": type("Message", (), {}),
+            "RPCError": type("RPCError", (Exception,), {}),
+            "FloodWaitError": type("FloodWaitError", (Exception,), {}),
+            # Guards against reintroducing an eager stack build: the caller
+            # stack is captured cheaply inside find_caller instead
+            "inspect": SimpleNamespace(
+                stack=Mock(
+                    side_effect=AssertionError(
+                        "eager inspect.stack() is forbidden on this path"
+                    )
+                )
+            ),
+        }
+
+    def load(self, name):
+        dispatcher_type = type("CommandDispatcher", (), {})
+        setattr(
+            dispatcher_type,
+            name,
+            load_definition(
+                "heroku/dispatcher.py", f"CommandDispatcher.{name}", self.namespace
+            ),
+        )
+        dispatcher = dispatcher_type()
+        return dispatcher, getattr(dispatcher, name)
+
+    async def test_watcher_exc_reports_without_building_the_caller_stack(self):
+        _, watcher_exc = self.load("watcher_exc")
+        await watcher_exc(object())
+        self.logger.exception.assert_called_once_with("Error running watcher")
+
+    async def test_command_exc_reports_without_building_the_caller_stack(self):
+        dispatcher, command_exc = self.load("command_exc")
+        dispatcher._db = SimpleNamespace(
+            get=lambda owner, key, default=None: False
+        )  # inlinelogs off -> the plain-text branch
+        message = SimpleNamespace(out=False, message=".cmd", reply=AsyncMock())
+        await command_exc(None, message)
+        self.logger.exception.assert_called_once_with("Command failed")
+        message.reply.assert_awaited_once()
 
 
 class TopicGuesserTest(unittest.IsolatedAsyncioTestCase):
