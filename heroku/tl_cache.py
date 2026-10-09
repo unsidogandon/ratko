@@ -149,6 +149,19 @@ def _put_bounded(cache: dict, key, record) -> None:
     cache[key] = record
 
 
+def _put_perms_bucket(cache: dict, entity_key) -> dict:
+    """Get or create the per-entity perms bucket.
+
+    The cap applies to the outer (entity-keyed) dict: inner buckets hold
+    a handful of user records each and age out as a whole unit.
+    """
+    bucket = cache.get(entity_key)
+    if bucket is None:
+        bucket = {}
+        _put_bounded(cache, entity_key, bucket)
+    return bucket
+
+
 def _clone_cached(value):
     """Shallow clone of a cached TL/custom object for a single reader.
 
@@ -849,33 +862,21 @@ class CustomTelegramClient(TelegramClient):
                 resolved_perms,
                 exp,
             )
-            _put_bounded(
-                self._heroku_perms_cache.setdefault(hashable_entity, {}),
-                hashable_user,
-                cache_record,
-            )
+            _put_perms_bucket(self._heroku_perms_cache, hashable_entity)[
+                hashable_user
+            ] = cache_record
             logger.debug("Saved hashable_entity %s perms to cache", hashable_entity)
 
             def save_user(key: str | int):
                 nonlocal self, cache_record, user, hashable_user
+                bucket = _put_perms_bucket(self._heroku_perms_cache, key)
+
                 if getattr(user, "id", None):
-                    _put_bounded(
-                        self._heroku_perms_cache.setdefault(key, {}),
-                        user.id,
-                        cache_record,
-                    )
+                    bucket[user.id] = cache_record
 
                 if getattr(user, "username", None):
-                    _put_bounded(
-                        self._heroku_perms_cache.setdefault(key, {}),
-                        f"@{user.username}",
-                        cache_record,
-                    )
-                    _put_bounded(
-                        self._heroku_perms_cache.setdefault(key, {}),
-                        user.username,
-                        cache_record,
-                    )
+                    bucket[f"@{user.username}"] = cache_record
+                    bucket[user.username] = cache_record
 
             if getattr(entity, "id", None):
                 logger.debug("Saved resolved_entity id %s perms to cache", entity.id)

@@ -559,6 +559,16 @@ def _code_name(code) -> str:
     return getattr(code, "co_qualname", code.co_name)
 
 
+# Frames under these paths are task-creation machinery sitting between the
+# task factory and the code that actually created the task: asyncio
+# internals (create_task, ensure_future, gather) plus ratko's own tracking
+# wrapper installed on the loop by _internal.install_task_tracking
+_ASYNCIO_PREFIX = os.path.dirname(asyncio.__file__) + os.sep
+_INTERNAL_WRAPPER_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "_internal.py"
+)
+
+
 def _await_chain(coro, limit: int = 8) -> str:
     chain = []
     current = coro
@@ -694,8 +704,19 @@ def _task_factory(loop, coro, **kwargs):
 
         # Single caller frame instead of traceback.extract_stack, which
         # walked the whole stack (with FrameSummary construction) for
-        # every created task while feeding only the exception log
+        # every created task while feeding only the exception log.
+        # ensure_future/gather and the tracking wrapper add their own
+        # frames between the factory and the real creator, so walk past
+        # them
         origin = sys._getframe(2)
+        walked = origin
+        while walked is not None and (
+            walked.f_code.co_filename.startswith(_ASYNCIO_PREFIX)
+            or walked.f_code.co_filename == _INTERNAL_WRAPPER_PATH
+        ):
+            walked = walked.f_back
+        if walked is not None:
+            origin = walked
         task._ratko_created_at = [
             f"{origin.f_code.co_filename}:{origin.f_lineno}"
             f" in {origin.f_code.co_name}"

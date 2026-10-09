@@ -289,7 +289,12 @@ class DatabasePersistenceTest(unittest.TestCase):
 class EntityCacheTest(unittest.TestCase):
     def setUp(self):
         self.namespace = {"time": time}
-        for name in ("_HEROKU_CACHE_LIMIT", "_clone_cached", "_put_bounded"):
+        for name in (
+            "_HEROKU_CACHE_LIMIT",
+            "_clone_cached",
+            "_put_bounded",
+            "_put_perms_bucket",
+        ):
             load_definition("heroku/tl_cache.py", name, self.namespace)
         for name in (
             "CacheRecordEntity",
@@ -339,6 +344,24 @@ class EntityCacheTest(unittest.TestCase):
         self.assertIn(10, cache)
         self.assertNotIn(0, cache)
 
+    def test_perms_buckets_reuse_and_bound_the_outer_cache(self):
+        self.namespace["_HEROKU_CACHE_LIMIT"] = 8
+        put_bucket = self.namespace["_put_perms_bucket"]
+        outer = {}
+        first = put_bucket(outer, "entity")
+        first["user"] = "record"
+        # same entity key -> the very same bucket, no re-creation
+        self.assertIs(put_bucket(outer, "entity"), first)
+        self.assertEqual(outer["entity"], {"user": "record"})
+
+        for key in range(12):
+            put_bucket(outer, key)["user"] = key
+        # the outer (entity-keyed) dict is bounded; buckets age out as units
+        self.assertLessEqual(len(outer), 8)
+        self.assertIn(11, outer)
+        self.assertNotIn("entity", outer)
+        self.assertNotIn(0, outer)
+
     def test_cache_records_store_objects_without_copying(self):
         entity = SimpleNamespace(id=1)
         record = self.namespace["CacheRecordEntity"](123, entity, 300)
@@ -362,10 +385,19 @@ class EntityCacheTest(unittest.TestCase):
 
 class TaskFactoryTest(unittest.TestCase):
     def setUp(self):
-        self.namespace = {"asyncio": asyncio, "sys": sys}
+        self.namespace = {
+            "asyncio": asyncio,
+            "os": os,
+            "sys": sys,
+            "__file__": str(ROOT / "heroku" / "main.py"),
+        }
         self.namespace["_code_name"] = load_definition(
             "heroku/main.py", "_code_name", self.namespace
         )
+        for name in ("_ASYNCIO_PREFIX", "_INTERNAL_WRAPPER_PATH"):
+            self.namespace[name] = load_definition(
+                "heroku/main.py", name, self.namespace
+            )
         self.factory = load_definition(
             "heroku/main.py", "_task_factory", self.namespace
         )
@@ -390,6 +422,49 @@ class TaskFactoryTest(unittest.TestCase):
             except asyncio.CancelledError:
                 pass
         finally:
+            loop.close()
+
+    def test_task_origin_skips_asyncio_internals(self):
+        async def coro():
+            return None
+
+        # Install the production task-tracking wrapper (idempotent), the
+        # same one heroku.main installs, so the origin walk is exercised
+        # end-to-end: factory <- create_task <- wrapper <- ensure_future
+        # <- creator
+        tracking_namespace = {"asyncio": asyncio}
+        tracking_namespace["_background_tasks"] = load_definition(
+            "heroku/_internal.py", "_background_tasks", tracking_namespace
+        )
+        load_definition(
+            "heroku/_internal.py", "_track_task", tracking_namespace
+        )
+        install_task_tracking = load_definition(
+            "heroku/_internal.py", "install_task_tracking", tracking_namespace
+        )
+        install_task_tracking()
+
+        loop = asyncio.new_event_loop()
+        loop.set_task_factory(self.factory)
+
+        def creator():
+            return asyncio.ensure_future(coro(), loop=loop)
+
+        try:
+            task = creator()
+            self.assertEqual(len(task._ratko_created_at), 1)
+            # asyncio and tracking-wrapper frames must be skipped: the
+            # origin is the code that created the task, not the machinery
+            self.assertNotIn("asyncio", task._ratko_created_at[0])
+            self.assertNotIn("_internal.py", task._ratko_created_at[0])
+            self.assertIn("creator", task._ratko_created_at[0])
+            task.cancel()
+            try:
+                loop.run_until_complete(task)
+            except asyncio.CancelledError:
+                pass
+        finally:
+            loop.set_task_factory(None)
             loop.close()
 
 
