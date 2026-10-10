@@ -701,6 +701,11 @@ class Modules:
         loaded = []
 
         for mod in modules:
+            # Yield to the event loop between modules: the loading is
+            # otherwise fully synchronous and would block boot-time
+            # background work (e.g. the inline bot client prewarm)
+            # from making any network progress in parallel
+            await asyncio.sleep(0)
             try:
                 mod_shortname = os.path.basename(mod).rsplit(".py", maxsplit=1)[0]
                 module_name = f"{__package__}.{MODULES_NAME}.{mod_shortname}"
