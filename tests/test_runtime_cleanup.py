@@ -62,6 +62,7 @@ class TranslationPackTest(unittest.IsolatedAsyncioTestCase):
         self.namespace = {
             "json": json,
             "yaml": SimpleNamespace(load=json.loads),
+            "_get_yaml_parser": lambda: SimpleNamespace(load=json.loads),
             "Path": Path,
             "urlsplit": urlsplit,
             "logger": Mock(),

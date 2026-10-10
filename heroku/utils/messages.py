@@ -788,12 +788,21 @@ def censor(
     return obj
 
 
+_TRIVIALLY_SERIALIZABLE = frozenset({str, int, float, bool, type(None)})
+
+
 def is_serializable(x: typing.Any, /) -> bool:
     """
     Checks if object is JSON-serializable
     :param x: Object to check
     :return: True if object is JSON-serializable, False otherwise
     """
+    # Exact trivial types are always JSON-serializable; this skips a
+    # full json.dumps of the (always-string) owner/key on every
+    # Database.set call
+    if type(x) in _TRIVIALLY_SERIALIZABLE:
+        return True
+
     try:
         json.dumps(x)
         return True

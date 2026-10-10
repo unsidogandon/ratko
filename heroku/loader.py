@@ -1069,6 +1069,11 @@ class Modules:
             if owned(unit.get("on_unload")):
                 unit.pop("on_unload")
 
+        if invalidate := getattr(
+            self.inline, "_invalidate_button_index", None
+        ):
+            invalidate()
+
     def register_watchers(self, instance: Module):
         """Register watcher from instance"""
         if self._is_module_disabled(instance):

@@ -347,6 +347,9 @@ class Form(InlineUnit):
             **({"always_allow": always_allow} if always_allow else {}),
         }
 
+        # Drop the inline button index (see Events._iter_callback_buttons)
+        self._callback_index = None
+
         async def answer(msg: str):
             nonlocal message
             if isinstance(message, Message):

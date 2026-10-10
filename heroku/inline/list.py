@@ -166,6 +166,9 @@ class List(InlineUnit):
             **({"custom_buttons": custom_buttons} if custom_buttons else {}),
         }
 
+        # Drop the inline button index (see Events._iter_callback_buttons)
+        self._callback_index = None
+
         btn_call_data = utils.rand(10)
 
         self._custom_map[btn_call_data] = {

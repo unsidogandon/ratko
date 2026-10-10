@@ -435,6 +435,8 @@ class Utils(InlineUnit):
         def commit_unit_update():
             if unit_id is not None and unit_id in self._units:
                 self._units[unit_id].update(pending_unit_update)
+                # Drop the inline button index (buttons may have changed)
+                self._callback_index = None
 
         if unit:
             chat_id = chat_id or unit.get("chat")
@@ -645,6 +647,8 @@ class Utils(InlineUnit):
             logger.exception("Inline unit %s failed during on_unload", unit_id)
         finally:
             self._units.pop(unit_id, None)
+            # Drop the inline button index (the unit is gone)
+            self._callback_index = None
             if unit.get("future") is not None:
                 unit["future"].set()
             callback_ids = {

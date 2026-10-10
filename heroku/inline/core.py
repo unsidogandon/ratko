@@ -164,6 +164,9 @@ class InlineManager(
         self._error_events: dict[str, asyncio.Event] = {}
         # id(handler) -> (handler, name) cache for _reverse_method_lookup
         self._rev_lookup_cache: dict[int, tuple] = {}
+        # Inline button callback-data index (see Events._iter_callback_buttons)
+        self._callback_index: dict | None = None
+        self._callback_index_built_at: float = 0.0
 
         self._markup_ttl = 60 * 60 * 24
         self.init_complete = False

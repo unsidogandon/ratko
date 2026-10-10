@@ -238,6 +238,9 @@ class Gallery(InlineUnit):
             **({"custom_buttons": custom_buttons} if custom_buttons else {}),
         }
 
+        # Drop the inline button index (see Events._iter_callback_buttons)
+        self._callback_index = None
+
         self._custom_map[btn_call_data] = {
             "unit_id": unit_id,
             "handler": functools.partial(

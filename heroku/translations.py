@@ -11,13 +11,15 @@
 # 🔑 https://www.gnu.org/licenses/agpl-3.0.html
 
 import asyncio
+import hashlib
 import json
 import logging
+import os
 import typing
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from ruamel.yaml import YAML
+import orjson
 
 from . import utils
 from ._internal import fetch_text
@@ -26,9 +28,40 @@ from .tl_cache import CustomTelegramClient
 from .types import Module
 
 logger = logging.getLogger(__name__)
-yaml = YAML(typ="safe")
+
+# The ruamel parser is created lazily: with the parsed-pack cache below
+# the startup path parses no YAML at all, and importing ruamel costs
+# ~50ms on its own
+_yaml_parser = None
+
+
+def _get_yaml_parser():
+    global _yaml_parser
+    if _yaml_parser is None:
+        from ruamel.yaml import YAML
+
+        _yaml_parser = YAML(typ="safe")
+
+    return _yaml_parser
+
 
 PACKS = Path(__file__).parent / "langpacks"
+
+# Mirrors loader.BASE_DIR (importing it here would be circular): the
+# parsed language packs cache lives next to the module langpack caches
+_CACHE_BASE_DIR = (
+    os.environ.get("RATKO_DATA_ROOT")
+    or os.environ.get("HEROKU_DATA_ROOT")
+    or (
+        "/data"
+        if "DOCKER" in os.environ
+        else os.path.normpath(os.path.join(utils.get_base_dir(), ".."))
+    )
+)
+CORE_LANGPACKS_CACHE_PATH = Path(_CACHE_BASE_DIR) / "loaded_modules" / "core-langpacks"
+
+# In-memory memo of the persistent cache: path -> (signature, parsed)
+_parsed_pack_memo: dict = {}
 SUPPORTED_LANGUAGES = {
     "en": "🇬🇧 English",
     "ru": "🇷🇺 Русский",
@@ -96,7 +129,12 @@ class BaseTranslator:
         pack: Path,
         prefix: str = "heroku.modules.",
     ) -> dict | None:
-        return self._get_pack_raw(pack.read_text(encoding="utf-8"), pack.suffix, prefix)
+        parsed = self._load_parsed_pack(pack)
+        if pack.suffix == ".json":
+            # JSON packs are consumed as-is (legacy behaviour)
+            return parsed
+
+        return self._flatten_pack(parsed, prefix)
 
     def _get_pack_raw(
         self,
@@ -104,15 +142,26 @@ class BaseTranslator:
         suffix: str,
         prefix: str = "heroku.modules.",
     ) -> dict | None:
-        match suffix:
-            case ".json":
-                return json.loads(content)
-            case _:
-                content = yaml.load(content)
+        parsed = self._parse_pack(content, suffix)
+        if suffix == ".json":
+            # JSON packs are consumed as-is (legacy behaviour)
+            return parsed
 
-        if not isinstance(content, dict):
+        return self._flatten_pack(parsed, prefix)
+
+    @staticmethod
+    def _parse_pack(content: str, suffix: str):
+        if suffix == ".json":
+            return json.loads(content)
+
+        parsed = _get_yaml_parser().load(content)
+        if not isinstance(parsed, dict):
             raise ValueError("Translation pack must be a mapping")
 
+        return parsed
+
+    @staticmethod
+    def _flatten_pack(parsed: dict, prefix: str) -> dict:
         def flatten(pack):
             return {
                 (
@@ -127,14 +176,70 @@ class BaseTranslator:
 
         # Detect the nesting, not the length of a language/module name. This
         # supports named packs like unsido and modules with two-letter names.
-        if content and all(
+        if parsed and all(
             isinstance(pack, dict)
             and all(isinstance(strings, dict) for strings in pack.values())
-            for pack in content.values()
+            for pack in parsed.values()
         ):
-            return {language: flatten(pack) for language, pack in content.items()}
+            return {language: flatten(pack) for language, pack in parsed.items()}
 
-        return flatten(content)
+        return flatten(parsed)
+
+    def _load_parsed_pack(self, pack: Path) -> dict:
+        """Parse a local language pack, with a persistent cache.
+
+        A cold boot parses the YAML files (~70ms each); the parsed
+        result is then stored as JSON next to the module langpack
+        caches, so every subsequent boot loads it in ~1ms instead.
+        The cache is invalidated by the pack file's (mtime, size)
+        signature. Pack values are plain strings, so the JSON
+        round-trip is type-exact.
+        """
+        key = str(pack)
+        try:
+            stat = pack.stat()
+            signature = (stat.st_mtime_ns, stat.st_size)
+        except OSError:
+            signature = None
+
+        memo = _parsed_pack_memo.get(key)
+        if memo is not None and memo[0] == signature:
+            return memo[1]
+
+        parsed = None
+        cache_file = (
+            CORE_LANGPACKS_CACHE_PATH
+            / f"{hashlib.sha1(key.encode('utf-8')).hexdigest()}.json"
+            if signature is not None
+            else None
+        )
+        if cache_file is not None:
+            try:
+                cached = orjson.loads(cache_file.read_bytes())
+                if (
+                    isinstance(cached, dict)
+                    and cached.get("signature") == list(signature)
+                    and isinstance(cached.get("data"), dict)
+                ):
+                    parsed = cached["data"]
+            except (OSError, orjson.JSONDecodeError):
+                parsed = None
+
+        if parsed is None:
+            parsed = self._parse_pack(pack.read_text(encoding="utf-8"), pack.suffix)
+            if cache_file is not None:
+                try:
+                    CORE_LANGPACKS_CACHE_PATH.mkdir(parents=True, exist_ok=True)
+                    cache_file.write_bytes(
+                        orjson.dumps({"signature": list(signature), "data": parsed})
+                    )
+                except OSError:
+                    logger.warning(
+                        "Failed to cache parsed langpack %s", pack, exc_info=True
+                    )
+
+        _parsed_pack_memo[key] = (signature, parsed)
+        return parsed
 
     def getkey(self, key: str) -> typing.Any:
         return self._data.get(key, False)
@@ -143,7 +248,7 @@ class BaseTranslator:
         return self.getkey(text) or text
 
     def _get_module_pack_raw(self, content: str) -> dict | None:
-        data = yaml.load(content)
+        data = _get_yaml_parser().load(content)
         if not isinstance(data, dict) or any(
             not isinstance(key, str) for key in data
         ):
@@ -242,12 +347,33 @@ class BaseTranslator:
         return data.get("en", {})
 
 
+class _LazyLanguagePacks(dict):
+    """Language pack map that loads packs on first access.
+
+    Only ``en`` and the active user language are parsed during startup;
+    any other language is loaded (from the parsed-pack cache) the first
+    time it is actually requested.
+    """
+
+    __slots__ = ("_translator",)
+
+    def __init__(self, translator: "Translator"):
+        super().__init__()
+        self._translator = translator
+
+    def __missing__(self, lang: str):
+        pack_path = get_language_pack_path(lang)
+        data = self._translator._get_pack_content(pack_path) if pack_path else {}
+        self[lang] = data
+        return data
+
+
 class Translator(BaseTranslator):
     def __init__(self, client: CustomTelegramClient, db: Database):
         self._client = client
         self.db = db
         self._data = {}
-        self.raw_data = {}
+        self.raw_data = _LazyLanguagePacks(self)
 
     async def init(self) -> bool:
         self._data = self._get_pack_content(PACKS / "en.yml")
@@ -278,12 +404,9 @@ class Translator(BaseTranslator):
                     self.raw_data[language] = data
                     any_ = True
 
-        for language in SUPPORTED_LANGUAGES:
-            if language not in self.raw_data and (
-                possible_path := get_language_pack_path(language)
-            ):
-                self.raw_data[language] = self._get_pack_content(possible_path)
-
+        # The rest of the supported languages are loaded lazily on
+        # first access (see _LazyLanguagePacks) instead of being
+        # preloaded here: that cost ~6 YAML parses on every boot
         return any_
 
 

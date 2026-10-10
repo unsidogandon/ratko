@@ -12,6 +12,7 @@
 
 import inspect
 import logging
+import time
 import typing
 from asyncio import Event
 
@@ -197,6 +198,67 @@ class Events(InlineUnit):
                     id=utils.rand(20),
                 )
 
+    # Interval after which a callback lookup that missed the index
+    # triggers a full rescan (self-healing for exotic cases where a
+    # module mutates unit buttons without going through the manager)
+    _BUTTON_INDEX_RESCAN_INTERVAL = 300
+
+    def _invalidate_button_index(self):
+        """Drop the inline button index; called wherever units or their
+        buttons change."""
+        self._callback_index = None
+
+    def _build_button_index(self):
+        """Index ``(unit_id, unit, button)`` triples by ``_callback_data``.
+
+        The scan order matches the previous full scan: unit insertion
+        order, then row order.
+        """
+        index = {}
+        for unit_id, unit in self._units.items():
+            for row in unit.get("buttons", []):
+                for button in row:
+                    if not isinstance(button, dict):
+                        logger.warning(
+                            "Can't process update, because of corrupted button: %s",
+                            button,
+                        )
+                        continue
+
+                    callback_data = button.get("_callback_data")
+                    if callback_data is not None:
+                        index.setdefault(callback_data, []).append(
+                            (unit_id, unit, button)
+                        )
+
+        self._callback_index = index
+        self._callback_index_built_at = time.monotonic()
+        return index
+
+    def _iter_callback_buttons(self, call_data):
+        """Iterate ``(unit_id, unit, button)`` for buttons matching
+        ``call_data``, in the same order a full scan would yield them.
+
+        A callback-data index makes the lookup O(1) instead of a scan
+        over every unit and button. Entries are verified for liveness,
+        so a missed invalidation can never run a stale button; index
+        misses rescan at a bounded rate only.
+        """
+        index = self._callback_index
+        if index is None or (
+            call_data not in index
+            and time.monotonic() - self._callback_index_built_at
+            > self._BUTTON_INDEX_RESCAN_INTERVAL
+        ):
+            index = self._build_button_index()
+
+        for unit_id, unit, button in index.get(call_data, ()):
+            if (
+                self._units.get(unit_id) is unit
+                and any(button in row for row in unit.get("buttons", []))
+            ):
+                yield unit_id, unit, button
+
     async def _callback_query_handler(
         self: "InlineManager",
         call,
@@ -229,65 +291,56 @@ class Events(InlineUnit):
                     )
                     continue
 
-        for unit_id, unit in self._units.copy().items():
-            for button in utils.array_sum(unit.get("buttons", [])):
-                if not isinstance(button, dict):
-                    logger.warning(
-                        "Can't process update, because of corrupted button: %s",
-                        button,
+        for unit_id, unit, button in self._iter_callback_buttons(call_data):
+            match True:
+                case _ if (
+                    button.get("disable_security", False)
+                    or unit.get("disable_security", False)
+                    or (unit.get("force_me", False) and user_id == self._me)
+                    or not unit.get("force_me", False)
+                    and (
+                        await self.check_inline_security(
+                            func=unit.get(
+                                "perms_map",
+                                lambda: self._client.dispatcher.security._default,
+                            )(),
+                            user=user_id,
+                        )
+                        if "message" in unit
+                        else False
                     )
-                    continue
+                ):
+                    pass
+                case _ if user_id not in (
+                    self._client.dispatcher.security._owner
+                    + unit.get("always_allow", [])
+                    + button.get("always_allow", [])
+                ):
+                    await call.answer(
+                        self.translator.getkey("inline.button403")
+                    )
+                    return
 
-                if button.get("_callback_data") == call_data:
-                    match True:
-                        case _ if (
-                            button.get("disable_security", False)
-                            or unit.get("disable_security", False)
-                            or (unit.get("force_me", False) and user_id == self._me)
-                            or not unit.get("force_me", False)
-                            and (
-                                await self.check_inline_security(
-                                    func=unit.get(
-                                        "perms_map",
-                                        lambda: self._client.dispatcher.security._default,
-                                    )(),
-                                    user=user_id,
-                                )
-                                if "message" in unit
-                                else False
-                            )
-                        ):
-                            pass
-                        case _ if user_id not in (
-                            self._client.dispatcher.security._owner
-                            + unit.get("always_allow", [])
-                            + button.get("always_allow", [])
-                        ):
-                            await call.answer(
-                                self.translator.getkey("inline.button403")
-                            )
-                            return
+            try:
+                result = await button["callback"](
+                    (InlineCall if call.via_inline else BotInlineCall)(
+                        call, self, unit_id
+                    ),
+                    *button.get("args", []),
+                    **button.get("kwargs", {}),
+                )
+            except Exception:
+                logger.exception("Error on running callback watcher!")
+                await call.answer(
+                    (
+                        "Error occurred while processing request. More info in"
+                        " logs"
+                    ),
+                    alert=True,
+                )
+                return
 
-                    try:
-                        result = await button["callback"](
-                            (InlineCall if call.via_inline else BotInlineCall)(
-                                call, self, unit_id
-                            ),
-                            *button.get("args", []),
-                            **button.get("kwargs", {}),
-                        )
-                    except Exception:
-                        logger.exception("Error on running callback watcher!")
-                        await call.answer(
-                            (
-                                "Error occurred while processing request. More info in"
-                                " logs"
-                            ),
-                            alert=True,
-                        )
-                        return
-
-                    return result
+            return result
 
         if call_data in self._custom_map:
             match True:
