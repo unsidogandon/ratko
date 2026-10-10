@@ -122,12 +122,16 @@ class RegistryNamespaceTest(unittest.IsolatedAsyncioTestCase):
                 "_shutdown_module", "_finish_shutdown", "_finish_shutdown_handlers",
                 "_wait_module_tasks", "_consume_shutdown_result", "send_ready_one",
                 "_send_ready_one", "find_alias", "_rebuild_alias_index",
+                "unregister_event_handlers",
             ), self.namespace,
             static=("_forget_module_namespace", "_consume_shutdown_result"),
         )
         self.registry = registry_type()
         self.registry.modules = []
-        self.registry.client = SimpleNamespace(tg_id=1)
+        self.registry.client = SimpleNamespace(
+            tg_id=1, list_event_handlers=lambda: []
+        )
+        self.registry.allclients = []
         self.registry._db = {}
         self.registry._remove_core_protection = False
         self.registry._alias_index = {}

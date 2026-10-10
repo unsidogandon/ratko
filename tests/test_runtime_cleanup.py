@@ -218,6 +218,7 @@ class RegistryLifecycleTest(unittest.IsolatedAsyncioTestCase):
             "logger": Mock(),
             "copy": copy,
             "contextlib": contextlib,
+            "partial": functools.partial,
             "utils": SimpleNamespace(iter_attrs=lambda obj: obj.attributes),
         }
         registry_type = type("Registry", (), {})
@@ -231,6 +232,7 @@ class RegistryLifecycleTest(unittest.IsolatedAsyncioTestCase):
             "register_raw_handlers",
             "register_bot_update_handlers",
             "unregister_commands",
+            "unregister_event_handlers",
         ):
             setattr(
                 registry_type,
@@ -453,6 +455,54 @@ class RegistryLifecycleTest(unittest.IsolatedAsyncioTestCase):
         self.registry.unregister_commands(module, "unload")
         self.assertIsNone(self.registry.find_alias("шакал"))
         self.assertNotIn("test", self.registry.commands)
+
+    def test_unload_removes_telethon_level_module_handlers(self):
+        """Zombie-module regression: client.add_event_handler() handlers
+        must be dropped when the module is shut down"""
+        module = self.bound_module("TestMod")
+        owned_callback = module.heroku_commands["Test"]
+
+        foreign = self.bound_module("ForeignMod")
+        foreign_callback = foreign.heroku_commands["Test"]
+
+        async def plain(message):
+            ...
+
+        wrapped = functools.partial(owned_callback)
+
+        new_message_event, edited_event = object(), object()
+        client = Mock()
+        client.list_event_handlers.return_value = [
+            (owned_callback, new_message_event),
+            (wrapped, edited_event),
+            (foreign_callback, new_message_event),
+            (plain, edited_event),
+        ]
+        client.remove_event_handler.side_effect = lambda callback, event: 1
+
+        self.registry.client = client
+        self.registry.allclients = [client]
+
+        self.registry.unregister_event_handlers(module, "unload")
+
+        removed_callbacks = [
+            call.args[0] for call in client.remove_event_handler.call_args_list
+        ]
+        self.assertIn(owned_callback, removed_callbacks)
+        self.assertIn(wrapped, removed_callbacks)
+        self.assertNotIn(foreign_callback, removed_callbacks)
+        self.assertNotIn(plain, removed_callbacks)
+        self.assertEqual(len(removed_callbacks), 2)
+
+    def test_unload_without_owned_handlers_touches_nothing(self):
+        module = self.bound_module("TestMod")
+        client = Mock()
+        client.list_event_handlers.return_value = []
+        self.registry.client = client
+        self.registry.allclients = []
+
+        self.registry.unregister_event_handlers(module, "unload")
+        client.remove_event_handler.assert_not_called()
 
 
 class LogBatchTest(unittest.IsolatedAsyncioTestCase):

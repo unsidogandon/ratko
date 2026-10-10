@@ -1499,6 +1499,7 @@ class Modules:
             self.unregister_commands,
             self.unregister_watchers,
             self.unregister_inline_stuff,
+            self.unregister_event_handlers,
         ):
             try:
                 unregister(module, purpose)
@@ -1539,6 +1540,38 @@ class Modules:
                     name,
                 )
                 method.stop()
+
+    def unregister_event_handlers(self, instance: Module, purpose: str):
+        """Remove raw telethon-level event handlers added by the module.
+
+        Modules may register handlers directly via
+        ``client.add_event_handler()`` (typically from ``client_ready``).
+        Those registrations are not tracked by any loader table, so
+        without this cleanup an unloaded module keeps receiving events
+        and acting on its load-time config until the process restarts
+        (a "zombie module").
+        """
+
+        def owned(handler):
+            while isinstance(handler, partial):
+                handler = handler.func
+            return getattr(handler, "__self__", None) is instance
+
+        removed = 0
+        # The loader's own client is normally part of allclients already;
+        # dict.fromkeys keeps one pass per client
+        for client in dict.fromkeys([self.client, *self.allclients]):
+            for callback, event in list(client.list_event_handlers()):
+                if owned(callback):
+                    removed += client.remove_event_handler(callback, event)
+
+        if removed:
+            logger.debug(
+                "Unregistered %s event handlers of %s for %s",
+                removed,
+                instance.__class__.__name__,
+                purpose,
+            )
 
     def unregister_commands(self, instance: Module, purpose: str):
         self._tables_dirty = True
