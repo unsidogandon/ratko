@@ -16,11 +16,13 @@ import asyncio
 import collections
 import contextlib
 import copy
+import hashlib
 import importlib
 import importlib.machinery
 import importlib.util
 import inspect
 import logging
+import marshal
 import os
 import re
 import sys
@@ -28,6 +30,7 @@ import time
 import typing
 from dataclasses import dataclass, field
 from importlib.abc import SourceLoader
+from pathlib import Path
 
 from herokutl.hints import EntityLike
 from herokutl.tl.functions.account import UpdateNotifySettingsRequest
@@ -86,6 +89,64 @@ JSONSerializable = typing.Union[str, int, float, bool, list, dict, None]
 ListLike = typing.Union[list, set, tuple]
 Command = typing.Callable[..., typing.Awaitable[typing.Any]]
 
+# Persistent bytecode cache for StringLoader. Module sources are
+# re-executed on every boot, and compiling the largest ones (up to
+# 1.5 MB) costs the better part of a second each. The cache is keyed
+# by the source hash and the compile filename, and tagged with the
+# interpreter version, so any change to the source or the runtime
+# invalidates it automatically. The trust model equals __pycache__:
+# only ever load what we ourselves wrote.
+_STRINGLOADER_CACHE_VERSION = 1
+_PYC_TAG = ":".join(
+    (
+        sys.implementation.cache_tag,
+        str(marshal.version),
+        str(_STRINGLOADER_CACHE_VERSION),
+    )
+)
+_STRINGLOADER_CACHE_DIR = (
+    Path(
+        os.environ.get("RATKO_DATA_ROOT")
+        or os.environ.get("HEROKU_DATA_ROOT")
+        or (
+            "/data"
+            if "DOCKER" in os.environ
+            else os.path.normpath(
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+            )
+        )
+    )
+    / "loaded_modules"
+    / "bytecode-cache"
+)
+
+
+def _cached_compile(source: bytes, filename: str):
+    """Compile module source, reusing a persisted bytecode cache."""
+    digest = hashlib.sha256(source).hexdigest()
+    key = hashlib.sha256(f"{_PYC_TAG}:{filename}".encode("utf-8")).hexdigest()
+    cache_path = _STRINGLOADER_CACHE_DIR / f"{key}.pyc"
+
+    try:
+        cached_tag, cached_digest, code = marshal.loads(cache_path.read_bytes())
+        if cached_tag == _PYC_TAG and cached_digest == digest:
+            return code
+    except (OSError, ValueError, EOFError, TypeError):
+        # Cold or corrupted cache entry; recompile below
+        pass
+
+    code = compile(source, filename, "exec", dont_inherit=True)
+
+    try:
+        _STRINGLOADER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        tmp_path = cache_path.with_name(f"{cache_path.name}.{os.getpid()}.tmp")
+        tmp_path.write_bytes(marshal.dumps((_PYC_TAG, digest, code)))
+        os.replace(tmp_path, cache_path)
+    except OSError:
+        logger.debug("Failed to persist bytecode cache for %s", filename)
+
+    return code
+
 
 class StringLoader(SourceLoader):
     """Load a python module/file from a string"""
@@ -97,9 +158,9 @@ class StringLoader(SourceLoader):
     def get_source(self, _=None) -> str:
         return self.data.decode("utf-8")
 
-    def get_code(self, fullname: str) -> bytes:
+    def get_code(self, fullname: str):
         return (
-            compile(source, self.origin, "exec", dont_inherit=True)
+            _cached_compile(source, self.origin)
             if (source := self.get_data(fullname))
             else None
         )

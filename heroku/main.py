@@ -1451,6 +1451,10 @@ class Heroku:
         modules.startup_progress = progress
         client.loader = modules
 
+        # The inline bot session's MTProto handshake is network-bound:
+        # start it now so it overlaps with module loading
+        modules.inline.prewarm_bot_client()
+
         await self._add_dispatcher(client, modules, db)
         if progress is not None:
             progress.stage("dispatcher ready", advance=True, stage="Dispatcher")

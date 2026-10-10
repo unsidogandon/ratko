@@ -145,8 +145,17 @@ class RegistryNamespaceTest(unittest.IsolatedAsyncioTestCase):
             "register_bot_update_handlers",
         ):
             setattr(self.registry, name, Mock())
+        # StringLoader.get_code now calls the module-level
+        # _cached_compile; provide the real one to the exec namespace
+        from heroku.types import _cached_compile
+
         self.StringLoader = load_definition(
-            "heroku/types.py", "StringLoader", {"SourceLoader": importlib.abc.SourceLoader}
+            "heroku/types.py",
+            "StringLoader",
+            {
+                "SourceLoader": importlib.abc.SourceLoader,
+                "_cached_compile": _cached_compile,
+            },
         )
         self.name = "_ratko_lifecycle_example"
 

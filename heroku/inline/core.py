@@ -176,6 +176,8 @@ class InlineManager(
         self._me: int = None
         self._name: str = None
         self._bot_client: TelegramClient = None
+        # Boot-time prewarm of the bot client (see prewarm_bot_client)
+        self._bot_prewarm: asyncio.Future = None
         self._task: asyncio.Future = None
         self._cleaner_task: asyncio.Future = None
         self.bot: TelethonBot = None
@@ -257,6 +259,78 @@ class InlineManager(
                     "Failed to remove stale bot session file %s", entry.path
                 )
 
+    def prewarm_bot_client(self):
+        """Start the inline bot client connection in the background.
+
+        The bot session's MTProto handshake is network-bound, so it is
+        kicked off while modules are still loading instead of running
+        after them. The result is adopted by ``register_manager``; any
+        failure simply falls back to the regular sequential start.
+        """
+        if not self._token or self._bot_client or self._bot_prewarm:
+            return
+
+        self._bot_prewarm = asyncio.ensure_future(self._prewarm_bot_client())
+
+    async def _prewarm_bot_client(self):
+        """Connect the bot client; returns ``(client, token)`` or ``None``."""
+        token = self._token
+        # register_manager assigns this only later, but the session path
+        # and the stale-session cleanup both need it right now
+        self._me = self._client.tg_id
+        bot_uid = token.split(":", 1)[0]
+        self._cleanup_stale_bot_sessions(bot_uid)
+        client = TelegramClient(
+            SQLiteSession(
+                os.path.join(main.SESSIONS_DIR, f"heroku-{self._me}-bot-{bot_uid}")
+            ),
+            self._client.api_id,
+            self._client.api_hash,
+            receive_updates=True,
+        )
+
+        try:
+            await client.start(bot_token=token)
+        except asyncio.CancelledError:
+            with contextlib.suppress(Exception):
+                await client.disconnect()
+            raise
+        except Exception:
+            logger.debug("Inline bot client prewarm failed", exc_info=True)
+            with contextlib.suppress(Exception):
+                await client.disconnect()
+            return None
+
+        return client, token
+
+    async def _take_prewarmed_client(self):
+        """Await and detach the prewarmed bot client, if any.
+
+        A prewarm made for a different token (the token may have been
+        replaced by ``_assert_token``/``restart_manager`` in between)
+        is disconnected and discarded.
+        """
+        task, self._bot_prewarm = self._bot_prewarm, None
+        if task is None:
+            return None
+
+        try:
+            result = await task
+        except Exception:
+            logger.debug("Inline bot client prewarm failed", exc_info=True)
+            return None
+
+        if not result:
+            return None
+
+        client, token = result
+        if token != self._token or self._bot_client:
+            with contextlib.suppress(Exception):
+                await client.disconnect()
+            return None
+
+        return client
+
     async def register_manager(
         self,
         after_break: bool = False,
@@ -293,13 +367,20 @@ class InlineManager(
 
         bot_uid = self._token.split(":", 1)[0]
         self._cleanup_stale_bot_sessions(bot_uid)
-        self._bot_client = TelegramClient(
-            SQLiteSession(
-                os.path.join(main.SESSIONS_DIR, f"heroku-{self._me}-bot-{bot_uid}")
-            ),
-            self._client.api_id,
-            self._client.api_hash,
-            receive_updates=True,
+        # A client prewarmed during module loading may already be
+        # connected; ``start`` below then only refreshes ``get_me``
+        self._bot_client = (
+            await self._take_prewarmed_client()
+            or TelegramClient(
+                SQLiteSession(
+                    os.path.join(
+                        main.SESSIONS_DIR, f"heroku-{self._me}-bot-{bot_uid}"
+                    )
+                ),
+                self._client.api_id,
+                self._client.api_hash,
+                receive_updates=True,
+            )
         )
 
         try:
@@ -441,6 +522,25 @@ class InlineManager(
         if self._task:
             self._task.cancel()
             self._task = None
+
+        prewarm, self._bot_prewarm = self._bot_prewarm, None
+        if prewarm is not None:
+            # A prewarm that completed but was never adopted (e.g. an
+            # exception before register_manager reached the adoption)
+            # must not leave a connected client behind
+            if (
+                prewarm.done()
+                and not prewarm.cancelled()
+                and prewarm.exception() is None
+            ):
+                result = prewarm.result()
+                if isinstance(result, tuple):
+                    with contextlib.suppress(Exception):
+                        await result[0].disconnect()
+
+            prewarm.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await prewarm
 
         bot_client = self._bot_client
         self._bot_client = None
