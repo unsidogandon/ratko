@@ -253,9 +253,12 @@ class Events(InlineUnit):
             index = self._build_button_index()
 
         for unit_id, unit, button in index.get(call_data, ()):
-            if (
-                self._units.get(unit_id) is unit
-                and any(button in row for row in unit.get("buttons", []))
+            if self._units.get(unit_id) is unit and any(
+                button in row
+                for row in unit.get("buttons", [])
+                # Tolerate corrupted rows (a non-list in place of a
+                # row): `dict in str` would raise TypeError
+                if isinstance(row, (list, tuple))
             ):
                 yield unit_id, unit, button
 

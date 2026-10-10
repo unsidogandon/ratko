@@ -103,6 +103,16 @@ class ButtonIndexTest(unittest.TestCase):
         ]
         self.assertEqual(found, ["unit-1"])
 
+    def test_corrupted_row_does_not_crash_liveness(self):
+        # A non-list in place of a row (before the row holding the
+        # matching button) used to raise TypeError from the liveness
+        # check (`dict in str`), killing the whole callback handler
+        manager = make_manager([("unit-1", ["corrupted", [button("a")]])])
+        found = [
+            unit_id for unit_id, _, _ in manager._iter_callback_buttons("a")
+        ]
+        self.assertEqual(found, ["unit-1"])
+
     def test_invalidation_clears_index(self):
         manager = make_manager([("unit-1", [[button("a")]])])
         manager._build_button_index()

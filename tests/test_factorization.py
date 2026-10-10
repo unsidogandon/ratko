@@ -47,6 +47,21 @@ class FactorizationTest(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 Factorization.factorize(value)
 
+    def test_cryptg_hang_regression_tiny_composite(self):
+        # pq=9 makes cryptg's Pollard-Brent loop forever while holding
+        # the GIL (instead of panicking); it must never reach cryptg.
+        # The pure Python path may return a degenerate factor pair
+        # (e.g. (1, 9)), which the authenticator rejects either way.
+        p, q = Factorization.factorize(9)
+        self.assertEqual(p * q, 9)
+        self.assertLessEqual(p, q)
+
+    def test_cryptg_hang_regression_large_prime(self):
+        # Some primes make cryptg loop forever; primes are routed to
+        # the pure Python path, which terminates with the work limit
+        with self.assertRaises(ValueError):
+            Factorization.factorize(13801249596628616299)
+
     def test_pure_python_fallback_when_cryptg_unavailable(self):
         saved = sys.modules.get("cryptg")
         sys.modules["cryptg"] = None
