@@ -95,6 +95,15 @@ class LoaderMod(loader.Module):
                 validator=loader.validators.Series(validator=loader.validators.Link()),
             ),
             loader.ConfigValue(
+                "auto_update_modules",
+                False,
+                "Re-download and re-install modules installed from links on"
+                " every startup. Disabled by default: this executes remote"
+                " code on each boot without any owner action. Modules are"
+                " always loaded from their local copies",
+                validator=loader.validators.Boolean(),
+            ),
+            loader.ConfigValue(
                 "share_link",
                 doc=lambda: self.strings["share_link_doc"],
                 validator=loader.validators.Boolean(),
@@ -1714,10 +1723,17 @@ class LoaderMod(loader.Module):
             self._db.set(loader.__name__, "secure_boot", False)
             self._secure_boot = True
         else:
-            for name, mod in todo.items():
-                await self.download_and_install(mod, name=name)
+            if self.config["auto_update_modules"]:
+                # Re-installing modules from their source links on every
+                # boot silently executes remote code without any owner
+                # action: a compromised module repo would mean RCE on
+                # restart. That is why this is opt-in. Modules are still
+                # loaded from their local copies (loaded_modules/);
+                # updates are installed explicitly via .dlmod
+                for name, mod in todo.items():
+                    await self.download_and_install(mod, name=name)
 
-            self.update_modules_in_db()
+                self.update_modules_in_db()
 
             aliases = {
                 alias: cmd
