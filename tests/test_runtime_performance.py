@@ -91,7 +91,7 @@ class AtomicWriteTest(unittest.TestCase):
         self.write = load_definition(
             "heroku/main.py", "_atomic_write_text", self.namespace
         )
-        self.directory = Path(tempfile.mkdtemp(prefix="ratko-atomic-", dir="/tmp/opencode"))
+        self.directory = Path(tempfile.mkdtemp(prefix="ratko-atomic-"))
 
     def tearDown(self):
         shutil.rmtree(self.directory, ignore_errors=True)
