@@ -383,6 +383,7 @@ settings:
   ratko: "{} <b>{}.{}.{}</b>\n\n<tg-emoji emoji-id=5310296284874159738>⚪️</tg-emoji> <b>Developers: <a href=\"https://t.me/h_ae_256\">@h_ae_256</a>, <a href=\"https://t.me/kot_ewik\">@kot_ewik</a>, <a href=\"https://t.me/squeeare\">@squeeare</a></b>"
   rich_ratko_message: '<figure><img src="{banner_url}"/></figure><h1>{platform} Userbot</h1><table bordered><tr><th>Component</th><th>Current release</th></tr><tr><td><b>Version</b></td><td><code>{version}</code></td></tr><tr><td><b>Build</b></td><td>{build}</td></tr><tr><td><b>Ratko TL</b></td><td><code>{htl_version}</code></td></tr><tr><td><b>API layer</b></td><td><code>{layer}</code></td></tr><tr><td><b>Current user</b></td><td><code>{current_user}</code></td></tr><tr><td><b>Developers</b></td><td><a href="https://t.me/h_ae_256">@h_ae_256</a>, <a href="https://t.me/kot_ewik">@kot_ewik</a>, <a href="https://t.me/squeeare">@squeeare</a></td></tr></table>'
   _cfg_rich_mode: "Show ratko as a Rich message."
+  _cfg_keep_message_state: "Remember messages with commands to tell a reaction from an edit. If disabled, any update of a message with reactions is ignored"
   confirm_cleardb: "⚠️ <b>Are you sure, that you want to clear database?</b>"
   cleardb_confirm: "🗑 Clear database"
   cancel: "🚫 Cancel"

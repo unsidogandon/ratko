@@ -58,6 +58,7 @@ from herokutl.utils import get_display_name
 
 from .. import main, utils
 from ..database import Database
+from ..types import InlineDownError
 from ..tl_cache import CustomTelegramClient
 from ..translations import Translator
 from .bot_pm import BotPM
@@ -180,7 +181,7 @@ class InlineManager(
         self._bot_prewarm: asyncio.Future = None
         self._task: asyncio.Future = None
         self._cleaner_task: asyncio.Future = None
-        self.bot: TelethonBot = None
+        self._bot: TelethonBot = None
         self.bot_id: int = None
         self.bot_username: str = None
         self._bot_entity = None
@@ -331,6 +332,13 @@ class InlineManager(
 
         return client
 
+    @property
+    def bot(self) -> TelethonBot:
+        """The inline bot. Raises `InlineDownError`, if it isn't running"""
+        if self._bot is None:
+            raise InlineDownError()
+        return self._bot
+
     async def register_manager(
         self,
         after_break: bool = False,
@@ -385,8 +393,7 @@ class InlineManager(
 
         try:
             await self._bot_client.start(bot_token=self._token)
-            self.bot = TelethonBot(self._bot_client, self._client)
-            self._bot = self.bot
+            self._bot = TelethonBot(self._bot_client, self._client)
             self._register_builtin_handlers()
             bot_me = await self._bot_client.get_me()
             telegram_id = bot_me.id
@@ -476,7 +483,7 @@ class InlineManager(
         after_break: bool = False,
     ) -> bool:
         try:
-            await self.bot(
+            await self._bot(
                 SetTypingRequest(self._client.tg_id, SendMessageTypingAction())
             )
             return True
@@ -557,7 +564,6 @@ class InlineManager(
             self._cleaner_task = None
 
         self.init_complete = False
-        self.bot = None
         self._bot = None
         self.bot_id = None
         self.bot_username = None

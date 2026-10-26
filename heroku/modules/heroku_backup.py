@@ -48,7 +48,9 @@ class HerokuBackupMod(loader.Module):
     async def client_ready(self):
         self._content_channel_id = await utils.wait_for_content_channel(self._db)
 
-        if not self.get("period") and self.inline.init_complete and self.inline.bot:
+        if not self.get("period") and self.inline.init_complete and getattr(
+            self.inline, "bot", None
+        ):
             await self.inline.bot.send_photo(
                 self.tg_id,
                 photo="https://raw.githubusercontent.com/unsidogandon/ratko/main/banner.jpg",
